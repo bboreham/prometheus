@@ -461,7 +461,7 @@ func (h *Head) updateMinMaxTime(mint, maxt int64) {
 	}
 }
 
-func (h *Head) loadWAL(r *wal.Reader, multiRef map[uint64]uint64, mmappedChunks map[uint64][]*mmappedChunk) (err error) {
+func (h *Head) loadWAL(r *wal.Reader, multiRef map[uint64]uint64, mmappedChunks map[uint64][]mmappedChunk) (err error) {
 	// Track number of samples that referenced a series we don't know about
 	// for error reporting.
 	var unknownRefs atomic.Uint64
@@ -785,8 +785,8 @@ func (h *Head) SetMinValidTime(minValidTime int64) {
 	h.minValidTime.Store(minValidTime)
 }
 
-func (h *Head) loadMmappedChunks() (map[uint64][]*mmappedChunk, error) {
-	mmappedChunks := map[uint64][]*mmappedChunk{}
+func (h *Head) loadMmappedChunks() (map[uint64][]mmappedChunk, error) {
+	mmappedChunks := map[uint64][]mmappedChunk{}
 	if err := h.chunkDiskMapper.IterateAllChunks(func(seriesRef, chunkRef uint64, mint, maxt int64, numSamples uint16) error {
 		if maxt < h.minValidTime.Load() {
 			return nil
@@ -801,7 +801,7 @@ func (h *Head) loadMmappedChunks() (map[uint64][]*mmappedChunk, error) {
 			}
 		}
 
-		slice = append(slice, &mmappedChunk{
+		slice = append(slice, mmappedChunk{
 			ref:        chunkRef,
 			minTime:    mint,
 			maxTime:    maxt,
@@ -817,19 +817,19 @@ func (h *Head) loadMmappedChunks() (map[uint64][]*mmappedChunk, error) {
 
 // removeCorruptedMmappedChunks attempts to delete the corrupted mmapped chunks and if it fails, it clears all the previously
 // loaded mmapped chunks.
-func (h *Head) removeCorruptedMmappedChunks(err error) map[uint64][]*mmappedChunk {
+func (h *Head) removeCorruptedMmappedChunks(err error) map[uint64][]mmappedChunk {
 	level.Info(h.logger).Log("msg", "Deleting mmapped chunk files")
 
 	if err := h.chunkDiskMapper.DeleteCorrupted(err); err != nil {
 		level.Info(h.logger).Log("msg", "Deletion of mmap chunk files failed, discarding chunk files completely", "err", err)
-		return map[uint64][]*mmappedChunk{}
+		return map[uint64][]mmappedChunk{}
 	}
 
 	level.Info(h.logger).Log("msg", "Deletion of mmap chunk files successful, reattempting m-mapping the on-disk chunks")
 	mmappedChunks, err := h.loadMmappedChunks()
 	if err != nil {
 		level.Error(h.logger).Log("msg", "Loading on-disk chunks failed, discarding chunk files completely", "err", err)
-		mmappedChunks = map[uint64][]*mmappedChunk{}
+		mmappedChunks = map[uint64][]mmappedChunk{}
 	}
 
 	return mmappedChunks
@@ -2155,7 +2155,7 @@ type memSeries struct {
 
 	ref           uint64
 	lset          labels.Labels
-	mmappedChunks []*mmappedChunk
+	mmappedChunks []mmappedChunk
 	headChunk     *memChunk
 	chunkRange    int64
 	firstChunkID  int
@@ -2234,7 +2234,7 @@ func (s *memSeries) mmapCurrentHeadChunk(chunkDiskMapper *chunks.ChunkDiskMapper
 			panic(err)
 		}
 	}
-	s.mmappedChunks = append(s.mmappedChunks, &mmappedChunk{
+	s.mmappedChunks = append(s.mmappedChunks, mmappedChunk{
 		ref:        chunkRef,
 		numSamples: uint16(s.headChunk.chunk.NumSamples()),
 		minTime:    s.headChunk.minTime,

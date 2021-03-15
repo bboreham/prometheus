@@ -350,32 +350,32 @@ func TestHead_Truncate(t *testing.T) {
 	s3, _, _ := h.getOrCreate(3, labels.FromStrings("a", "1", "b", "2"))
 	s4, _, _ := h.getOrCreate(4, labels.FromStrings("a", "2", "b", "2", "c", "1"))
 
-	s1.mmappedChunks = []*mmappedChunk{
+	s1.mmappedChunks = []mmappedChunk{
 		{minTime: 0, maxTime: 999},
 		{minTime: 1000, maxTime: 1999},
 		{minTime: 2000, maxTime: 2999},
 	}
-	s2.mmappedChunks = []*mmappedChunk{
+	s2.mmappedChunks = []mmappedChunk{
 		{minTime: 1000, maxTime: 1999},
 		{minTime: 2000, maxTime: 2999},
 		{minTime: 3000, maxTime: 3999},
 	}
-	s3.mmappedChunks = []*mmappedChunk{
+	s3.mmappedChunks = []mmappedChunk{
 		{minTime: 0, maxTime: 999},
 		{minTime: 1000, maxTime: 1999},
 	}
-	s4.mmappedChunks = []*mmappedChunk{}
+	s4.mmappedChunks = []mmappedChunk{}
 
 	// Truncation need not be aligned.
 	require.NoError(t, h.Truncate(1))
 
 	require.NoError(t, h.Truncate(2000))
 
-	require.Equal(t, []*mmappedChunk{
+	require.Equal(t, []mmappedChunk{
 		{minTime: 2000, maxTime: 2999},
 	}, h.series.getByID(s1.ref).mmappedChunks)
 
-	require.Equal(t, []*mmappedChunk{
+	require.Equal(t, []mmappedChunk{
 		{minTime: 2000, maxTime: 2999},
 		{minTime: 3000, maxTime: 3999},
 	}, h.series.getByID(s2.ref).mmappedChunks)
