@@ -428,15 +428,18 @@ func (h *Head) ExemplarQuerier(ctx context.Context) (storage.ExemplarQuerier, er
 	return h.exemplars.ExemplarQuerier(ctx)
 }
 
+// Struct to contain a slice of RefSample, to make pooling easier
+type refSampleSlice struct {
+	s []record.RefSample
+}
+
 // processWALSamples adds a partition of samples it receives to the head and passes
 // them on to other workers.
 // Samples before the mint timestamp are discarded.
 func (h *Head) processWALSamples(
 	minValidTime int64,
-	input <-chan []record.RefSample, output chan<- []record.RefSample,
+	input <-chan *refSampleSlice, pool *sync.Pool,
 ) (unknownRefs uint64) {
-	defer close(output)
-
 	// Mitigate lock contention in getByID.
 	type seriesAndTime struct {
 		ms      *memSeries
@@ -447,7 +450,7 @@ func (h *Head) processWALSamples(
 	mint, maxt := int64(math.MaxInt64), int64(math.MinInt64)
 
 	for samples := range input {
-		for _, s := range samples {
+		for _, s := range samples.s {
 			if s.T < minValidTime {
 				continue
 			}
@@ -478,7 +481,7 @@ func (h *Head) processWALSamples(
 				mint = s.T
 			}
 		}
-		output <- samples
+		pool.Put(samples)
 	}
 	h.updateMinMaxTime(mint, maxt)
 
@@ -518,12 +521,11 @@ func (h *Head) loadWAL(r *wal.Reader, multiRef map[uint64]uint64, mmappedChunks 
 	var (
 		wg             sync.WaitGroup
 		n              = runtime.GOMAXPROCS(0)
-		inputs         = make([]chan []record.RefSample, n)
-		outputs        = make([]chan []record.RefSample, n)
+		inputs         = make([]chan *refSampleSlice, n)
 		exemplarsInput chan record.RefExemplar
 
 		dec    record.Decoder
-		shards = make([][]record.RefSample, n)
+		shards = make([]*refSampleSlice, n)
 
 		decoded                      = make(chan interface{}, 10)
 		decodeErr, seriesCreationErr error
@@ -534,7 +536,7 @@ func (h *Head) loadWAL(r *wal.Reader, multiRef map[uint64]uint64, mmappedChunks 
 		}
 		samplesPool = sync.Pool{
 			New: func() interface{} {
-				return []record.RefSample{}
+				return &refSampleSlice{}
 			},
 		}
 		tstonesPool = sync.Pool{
@@ -555,8 +557,6 @@ func (h *Head) loadWAL(r *wal.Reader, multiRef map[uint64]uint64, mmappedChunks 
 		if ok || seriesCreationErr != nil {
 			for i := 0; i < n; i++ {
 				close(inputs[i])
-				for range outputs[i] {
-				}
 			}
 			close(exemplarsInput)
 			wg.Wait()
@@ -565,14 +565,13 @@ func (h *Head) loadWAL(r *wal.Reader, multiRef map[uint64]uint64, mmappedChunks 
 
 	wg.Add(n)
 	for i := 0; i < n; i++ {
-		outputs[i] = make(chan []record.RefSample, 300)
-		inputs[i] = make(chan []record.RefSample, 300)
+		inputs[i] = make(chan *refSampleSlice, 300)
 
-		go func(input <-chan []record.RefSample, output chan<- []record.RefSample) {
-			unknown := h.processWALSamples(h.minValidTime.Load(), input, output)
+		go func(input <-chan *refSampleSlice) {
+			unknown := h.processWALSamples(h.minValidTime.Load(), input, &samplesPool)
 			unknownRefs.Add(unknown)
 			wg.Done()
-		}(inputs[i], outputs[i])
+		}(inputs[i])
 	}
 
 	wg.Add(1)
@@ -615,9 +614,10 @@ func (h *Head) loadWAL(r *wal.Reader, multiRef map[uint64]uint64, mmappedChunks 
 					return
 				}
 				decoded <- series
+				//fmt.Printf("series: %d\n", len(series))
 			case record.Samples:
-				samples := samplesPool.Get().([]record.RefSample)[:0]
-				samples, err = dec.Samples(rec, samples)
+				samples := samplesPool.Get().(*refSampleSlice)
+				samples.s, err = dec.Samples(rec, samples.s[:0])
 				if err != nil {
 					decodeErr = &wal.CorruptionErr{
 						Err:     errors.Wrap(err, "decode samples"),
@@ -626,6 +626,7 @@ func (h *Head) loadWAL(r *wal.Reader, multiRef map[uint64]uint64, mmappedChunks 
 					}
 					return
 				}
+				//fmt.Printf("samples: %d\n", len(samples))
 				decoded <- samples
 			case record.Tombstones:
 				tstones := tstonesPool.Get().([]tombstones.Stone)[:0]
@@ -692,8 +693,8 @@ Outer:
 			}
 			//nolint:staticcheck // Ignore SA6002 relax staticcheck verification.
 			seriesPool.Put(v)
-		case []record.RefSample:
-			samples := v
+		case *refSampleSlice:
+			samples := v.s
 			// We split up the samples into chunks of 5000 samples or less.
 			// With O(300 * #cores) in-flight sample batches, large scrapes could otherwise
 			// cause thousands of very large in flight buffers occupying large amounts
@@ -704,26 +705,21 @@ Outer:
 					m = len(samples)
 				}
 				for i := 0; i < n; i++ {
-					var buf []record.RefSample
-					select {
-					case buf = <-outputs[i]:
-					default:
-					}
-					shards[i] = buf[:0]
+					shards[i] = samplesPool.Get().(*refSampleSlice)
+					shards[i].s = shards[i].s[:0]
 				}
 				for _, sam := range samples[:m] {
 					if r, ok := multiRef[sam.Ref]; ok {
 						sam.Ref = r
 					}
 					mod := sam.Ref % uint64(n)
-					shards[mod] = append(shards[mod], sam)
+					shards[mod].s = append(shards[mod].s, sam)
 				}
 				for i := 0; i < n; i++ {
 					inputs[i] <- shards[i]
 				}
 				samples = samples[m:]
 			}
-			//nolint:staticcheck // Ignore SA6002 relax staticcheck verification.
 			samplesPool.Put(v)
 		case []tombstones.Stone:
 			for _, s := range v {
@@ -761,11 +757,9 @@ Outer:
 		return seriesCreationErr
 	}
 
-	// Signal termination to each worker and wait for it to close its output channel.
+	// Signal termination to each worker
 	for i := 0; i < n; i++ {
 		close(inputs[i])
-		for range outputs[i] {
-		}
 	}
 	close(exemplarsInput)
 	wg.Wait()
