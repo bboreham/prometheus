@@ -708,7 +708,14 @@ Outer:
 					shards[mod] = append(shards[mod], sam)
 				}
 				for i := 0; i < n; i++ {
-					inputs[i] <- shards[i]
+					if len(shards[i]) == 0 { // empty shard - send buffer back to recycle channel
+						select {
+						case outputs[i] <- shards[i]:
+						default:
+						}
+					} else {
+						inputs[i] <- shards[i]
+					}
 				}
 				samples = samples[m:]
 			}
