@@ -437,13 +437,6 @@ func (h *Head) processWALSamples(
 ) (unknownRefs uint64) {
 	defer close(output)
 
-	// Cache some per-series information for performance.
-	type seriesAndTime struct {
-		ms      *memSeries // To avoid lock/unlock in getByID.
-		minTime int64      // Minimum time append() will accept.
-	}
-	refSeries := map[uint64]seriesAndTime{}
-
 	mint, maxt := int64(math.MaxInt64), int64(math.MinInt64)
 
 	for samples := range input {
@@ -451,27 +444,10 @@ func (h *Head) processWALSamples(
 			if s.T < minValidTime {
 				continue
 			}
-			ms := refSeries[s.Ref]
-			if ms.ms == nil {
-				ms.ms = h.series.getByID(s.Ref)
-				if ms.ms == nil {
-					unknownRefs++
-					continue
-				}
-				// Find out if there is a timestamp before which all timestamps are in mmapped chunks.
-				// We cache this as it is a relatively expensive operation to follow all the pointers.
-				if len(ms.ms.mmappedChunks) == 0 {
-					ms.minTime = math.MinInt64
-				} else {
-					ms.minTime = ms.ms.mmappedChunks[len(ms.ms.mmappedChunks)-1].maxTime
-				}
-				refSeries[s.Ref] = ms
-			}
-			if ms.minTime < s.T {
-				if _, chunkCreated := ms.ms.append(s.T, s.V, 0, h.chunkDiskMapper); chunkCreated {
-					h.metrics.chunksCreated.Inc()
-					h.metrics.chunks.Inc()
-				}
+			ms := h.series.getByID(s.Ref)
+			if _, chunkCreated := ms.append(s.T, s.V, 0, h.chunkDiskMapper); chunkCreated {
+				h.metrics.chunksCreated.Inc()
+				h.metrics.chunks.Inc()
 			}
 			if s.T > maxt {
 				maxt = s.T
