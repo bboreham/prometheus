@@ -437,10 +437,10 @@ func (h *Head) processWALSamples(
 ) (unknownRefs uint64) {
 	defer close(output)
 
-	// Mitigate lock contention in getByID.
+	// Cache some per-series information for performance.
 	type seriesAndTime struct {
-		ms      *memSeries
-		minTime int64
+		ms      *memSeries // To avoid lock/unlock in getByID.
+		minTime int64      // Minimum time append() will accept.
 	}
 	refSeries := map[uint64]seriesAndTime{}
 
@@ -458,6 +458,8 @@ func (h *Head) processWALSamples(
 					unknownRefs++
 					continue
 				}
+				// Find out if there is a timestamp before which all timestamps are in mmapped chunks.
+				// We cache this as it is a relatively expensive operation to follow all the pointers.
 				if len(ms.ms.mmappedChunks) == 0 {
 					ms.minTime = math.MinInt64
 				} else {
