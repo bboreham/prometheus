@@ -445,6 +445,9 @@ func (h *Head) processWALSamples(
 				continue
 			}
 			ms := h.series.getByID(s.Ref)
+			if s.T < ms.mmMaxTime {
+				continue
+			}
 			if _, chunkCreated := ms.append(s.T, s.V, 0, h.chunkDiskMapper); chunkCreated {
 				h.metrics.chunksCreated.Inc()
 				h.metrics.chunks.Inc()
@@ -655,6 +658,7 @@ Outer:
 					h.metrics.chunksCreated.Add(float64(len(series.mmappedChunks)))
 
 					if len(series.mmappedChunks) > 0 {
+						series.mmMaxTime = series.mmappedChunks[len(series.mmappedChunks)-1].maxTime
 						h.updateMinMaxTime(series.minTime(), series.maxTime())
 					}
 				} else {
@@ -2125,7 +2129,7 @@ func newStripeSeries(stripeSize int, seriesCallback SeriesLifecycleCallback) *st
 	}
 
 	for i := range s.series {
-		s.series[i] = map[uint64]*memSeries{}
+		s.series[i] = make(map[uint64]*memSeries, 128)
 	}
 	for i := range s.hashes {
 		s.hashes[i] = seriesHashmap{}
@@ -2277,6 +2281,7 @@ type memSeries struct {
 	ref           uint64
 	lset          labels.Labels
 	mmappedChunks []*mmappedChunk
+	mmMaxTime     int64
 	headChunk     *memChunk
 	chunkRange    int64
 	firstChunkID  int
