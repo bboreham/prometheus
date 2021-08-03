@@ -456,6 +456,9 @@ func (h *Head) processWALSamples(
 				}
 				refSeries[s.Ref] = ms
 			}
+			if s.T < ms.mmMaxTime {
+				continue
+			}
 			if _, chunkCreated := ms.append(s.T, s.V, 0, h.chunkDiskMapper); chunkCreated {
 				h.metrics.chunksCreated.Inc()
 				h.metrics.chunks.Inc()
@@ -666,7 +669,11 @@ Outer:
 					h.metrics.chunksCreated.Add(float64(len(series.mmappedChunks)))
 
 					if len(series.mmappedChunks) > 0 {
+						// Cache the last mmapped chunk time, so we can skip calling append() for samples it will reject
+						series.mmMaxTime = series.mmappedChunks[len(series.mmappedChunks)-1].maxTime
 						h.updateMinMaxTime(series.minTime(), series.maxTime())
+					} else {
+						series.mmMaxTime = math.MinInt64
 					}
 				} else {
 					// TODO(codesome) Discard old samples and mmapped chunks and use mmap chunks for the new series ID.
@@ -2288,6 +2295,7 @@ type memSeries struct {
 	ref           uint64
 	lset          labels.Labels
 	mmappedChunks []*mmappedChunk
+	mmMaxTime     int64
 	headChunk     *memChunk
 	chunkRange    int64
 	firstChunkID  int
