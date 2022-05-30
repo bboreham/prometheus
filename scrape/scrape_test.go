@@ -1578,7 +1578,7 @@ func TestScrapeLoopAppendSampleLimit(t *testing.T) {
 		nil, nil, nil,
 		func(l labels.Labels) labels.Labels {
 			if l.Has("deleteme") {
-				return nil
+				return labels.EmptyLabels()
 			}
 			return l
 		},
