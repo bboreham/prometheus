@@ -439,7 +439,7 @@ type blockBaseSeriesSet struct {
 
 	bufChks []chunks.Meta
 	bufLbls labels.Labels
-	builder labels.SimpleBuilder
+	builder labels.ScratchBuilder
 	err     error
 }
 
