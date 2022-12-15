@@ -108,7 +108,7 @@ func TestRepairBadIndexVersion(t *testing.T) {
 		var lset labels.Labels
 		var chks []chunks.Meta
 		require.NoError(t, r.Series(p.At(), &builder, &lset, &chks))
-		res = append(res, lset)
+		res = append(res, lset.Copy())
 	}
 
 	require.NoError(t, p.Err())

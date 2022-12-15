@@ -423,7 +423,7 @@ func TestPersistence_index_e2e(t *testing.T) {
 
 		var lset, explset labels.Labels
 		var chks, expchks []chunks.Meta
-		var builder labels.ScratchBuilder
+		var builder, eBuilder labels.ScratchBuilder
 
 		for gotp.Next() {
 			require.True(t, expp.Next())
@@ -433,7 +433,7 @@ func TestPersistence_index_e2e(t *testing.T) {
 			err := ir.Series(ref, &builder, &lset, &chks)
 			require.NoError(t, err)
 
-			err = mi.Series(expp.At(), &builder, &explset, &expchks)
+			err = mi.Series(expp.At(), &eBuilder, &explset, &expchks)
 			require.NoError(t, err)
 			require.Equal(t, explset, lset)
 			require.Equal(t, expchks, chks)
