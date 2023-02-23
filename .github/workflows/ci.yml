@@ -19,6 +19,7 @@ jobs:
       - run: go test ./tsdb/ -test.tsdb-isolation=false
       - run: go test --tags=stringlabels ./...
       - run: GOARCH=386 go test ./cmd/prometheus
+      - run: go test --tags=stringlabels ./...
       - run: make -C documentation/examples/remote_storage
       - run: make -C documentation/examples
       - uses: ./.github/promci/actions/check_proto
