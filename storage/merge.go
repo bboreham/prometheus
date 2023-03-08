@@ -112,8 +112,7 @@ func (q *mergeGenericQuerier) Select(sortSeries bool, hints *SelectHints, matche
 			seriesSets = append(seriesSets, querier.Select(true, hints, matchers...))
 		}
 		return &lazyGenericSeriesSet{init: func() (genericSeriesSet, bool) {
-			s := newGenericMergeSeriesSet(seriesSets, q.mergeFn)
-			return s, s.Next()
+			return newGenericMergeSeriesSet(seriesSets, q.mergeFn, true)
 		}}
 	}
 
@@ -140,8 +139,7 @@ func (q *mergeGenericQuerier) Select(sortSeries bool, hints *SelectHints, matche
 		seriesSets = append(seriesSets, r)
 	}
 	return &lazyGenericSeriesSet{init: func() (genericSeriesSet, bool) {
-		s := newGenericMergeSeriesSet(seriesSets, q.mergeFn)
-		return s, s.Next()
+		return newGenericMergeSeriesSet(seriesSets, q.mergeFn, true)
 	}}
 }
 
@@ -267,7 +265,8 @@ func NewMergeSeriesSet(sets []SeriesSet, mergeFunc VerticalSeriesMergeFunc) Seri
 	for _, s := range sets {
 		genericSets = append(genericSets, &genericSeriesSetAdapter{s})
 	}
-	return &seriesSetAdapter{newGenericMergeSeriesSet(genericSets, (&seriesMergerAdapter{VerticalSeriesMergeFunc: mergeFunc}).Merge)}
+	s, _ := newGenericMergeSeriesSet(genericSets, (&seriesMergerAdapter{VerticalSeriesMergeFunc: mergeFunc}).Merge, false)
+	return &seriesSetAdapter{s}
 }
 
 // VerticalChunkSeriesMergeFunc returns merged chunk series implementation that merges potentially time-overlapping
@@ -282,7 +281,8 @@ func NewMergeChunkSeriesSet(sets []ChunkSeriesSet, mergeFunc VerticalChunkSeries
 	for _, s := range sets {
 		genericSets = append(genericSets, &genericChunkSeriesSetAdapter{s})
 	}
-	return &chunkSeriesSetAdapter{newGenericMergeSeriesSet(genericSets, (&chunkSeriesMergerAdapter{VerticalChunkSeriesMergeFunc: mergeFunc}).Merge)}
+	s, _ := newGenericMergeSeriesSet(genericSets, (&chunkSeriesMergerAdapter{VerticalChunkSeriesMergeFunc: mergeFunc}).Merge, false)
+	return &chunkSeriesSetAdapter{s}
 }
 
 // genericMergeSeriesSet implements genericSeriesSet.
@@ -300,9 +300,12 @@ type genericMergeSeriesSet struct {
 // Each series set must return its series in labels order, otherwise
 // merged series set will be incorrect.
 // Overlapped situations are merged using provided mergeFunc.
-func newGenericMergeSeriesSet(sets []genericSeriesSet, mergeFunc genericSeriesMergeFunc) genericSeriesSet {
+func newGenericMergeSeriesSet(sets []genericSeriesSet, mergeFunc genericSeriesMergeFunc, doFirstNext bool) (genericSeriesSet, bool) {
 	if len(sets) == 1 {
-		return sets[0]
+		if doFirstNext {
+			return sets[0], sets[0].Next()
+		}
+		return sets[0], false
 	}
 
 	// We are pre-advancing sets, so we can introspect the label of the
@@ -316,14 +319,21 @@ func newGenericMergeSeriesSet(sets []genericSeriesSet, mergeFunc genericSeriesMe
 			heap.Push(&h, set)
 		}
 		if err := set.Err(); err != nil {
-			return errorOnlySeriesSet{err}
+			return errorOnlySeriesSet{err}, false
 		}
 	}
-	return &genericMergeSeriesSet{
+	if doFirstNext && h.Len() == 1 {
+		return h[0], true
+	}
+	ret := &genericMergeSeriesSet{
 		mergeFunc: mergeFunc,
 		sets:      sets,
 		heap:      h,
 	}
+	if doFirstNext {
+		return ret, ret.Next()
+	}
+	return ret, false
 }
 
 func (c *genericMergeSeriesSet) Next() bool {

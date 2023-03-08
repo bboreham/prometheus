@@ -918,7 +918,8 @@ func makeMergeSeriesSet(serieses [][]Series) SeriesSet {
 	for i, s := range serieses {
 		seriesSets[i] = &genericSeriesSetAdapter{NewMockSeriesSet(s...)}
 	}
-	return &seriesSetAdapter{newGenericMergeSeriesSet(seriesSets, (&seriesMergerAdapter{VerticalSeriesMergeFunc: ChainedSeriesMerge}).Merge)}
+	ss, _ := newGenericMergeSeriesSet(seriesSets, (&seriesMergerAdapter{VerticalSeriesMergeFunc: ChainedSeriesMerge}).Merge, false)
+	return &seriesSetAdapter{ss}
 }
 
 func benchmarkDrain(b *testing.B, makeSeriesSet func() SeriesSet) {
