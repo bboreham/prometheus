@@ -687,7 +687,7 @@ func TestScratchBuilder(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			b := NewScratchBuilder(len(tcase.add))
+			b := NewScratchBuilder(NewSymbolTable(), len(tcase.add))
 			for _, lbl := range tcase.add {
 				b.Add(lbl.Name, lbl.Value)
 			}

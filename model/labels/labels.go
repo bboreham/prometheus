@@ -603,7 +603,7 @@ type ScratchBuilder struct {
 }
 
 // NewScratchBuilder creates a ScratchBuilder initialized for Labels with n entries.
-func NewScratchBuilder(n int) ScratchBuilder {
+func NewScratchBuilder(s *SymbolTable, n int) ScratchBuilder {
 	return ScratchBuilder{add: make([]Label, 0, n)}
 }
 
