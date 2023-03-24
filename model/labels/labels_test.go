@@ -774,9 +774,10 @@ func BenchmarkBuilder(b *testing.B) {
 	}
 
 	var l Labels
-	builder := NewBuilder(EmptyLabels())
+	blank := FromStrings()
+	builder := NewBuilder(blank)
 	for i := 0; i < b.N; i++ {
-		builder.Reset(EmptyLabels())
+		builder.Reset(blank)
 		for _, l := range m {
 			builder.Set(l.Name, l.Value)
 		}
