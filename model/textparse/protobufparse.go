@@ -84,6 +84,7 @@ func NewProtobufParser(b []byte, parseClassicHistograms bool) Parser {
 		mf:                     &dto.MetricFamily{},
 		metricBytes:            &bytes.Buffer{},
 		parseClassicHistograms: parseClassicHistograms,
+		builder:                labels.NewScratchBuilder(labels.NewSymbolTable(), 16),
 	}
 }
 
