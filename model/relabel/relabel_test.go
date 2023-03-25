@@ -570,7 +570,7 @@ func TestRelabel(t *testing.T) {
 		res, keep := Process(test.input, test.relabel...)
 		require.Equal(t, !test.drop, keep)
 		if keep {
-			require.Equal(t, test.output, res)
+			require.True(t, labels.Equal(test.output, res))
 		}
 	}
 }
