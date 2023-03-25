@@ -1773,12 +1773,12 @@ func TestProtobufParse(t *testing.T) {
 						require.Equal(t, exp[i].t, int64(0), "i: %d", i)
 					}
 					require.Equal(t, exp[i].v, v, "i: %d", i)
-					require.Equal(t, exp[i].lset, res, "i: %d", i)
+					require.True(t, labels.Equal(exp[i].lset, res), "i: %d", i)
 					if len(exp[i].e) == 0 {
 						require.Equal(t, false, found, "i: %d", i)
 					} else {
 						require.Equal(t, true, found, "i: %d", i)
-						require.Equal(t, exp[i].e[0], e, "i: %d", i)
+						require.True(t, exp[i].e[0].Equals(e), "i: %d", i)
 						require.False(t, p.Exemplar(&e), "too many exemplars returned, i: %d", i)
 					}
 
@@ -1791,7 +1791,7 @@ func TestProtobufParse(t *testing.T) {
 					} else {
 						require.Equal(t, exp[i].t, int64(0), "i: %d", i)
 					}
-					require.Equal(t, exp[i].lset, res, "i: %d", i)
+					require.True(t, labels.Equal(exp[i].lset, res), "i: %d", i)
 					require.Equal(t, exp[i].m, string(m), "i: %d", i)
 					if shs != nil {
 						require.Equal(t, exp[i].shs, shs, "i: %d", i)
@@ -1800,7 +1800,7 @@ func TestProtobufParse(t *testing.T) {
 					}
 					j := 0
 					for e := (exemplar.Exemplar{}); p.Exemplar(&e); j++ {
-						require.Equal(t, exp[i].e[j], e, "i: %d", i)
+						require.True(t, exp[i].e[j].Equals(e), "i: %d", i)
 						e = exemplar.Exemplar{}
 					}
 					require.Equal(t, len(exp[i].e), j, "not enough exemplars found, i: %d", i)

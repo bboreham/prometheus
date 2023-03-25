@@ -267,12 +267,12 @@ foo_total 17.0 1520879607.789 # {id="counter-test"} 5`
 			require.Equal(t, exp[i].m, string(m))
 			require.Equal(t, exp[i].t, ts)
 			require.Equal(t, exp[i].v, v)
-			require.Equal(t, exp[i].lset, res)
+			require.True(t, labels.Equal(exp[i].lset, res))
 			if exp[i].e == nil {
 				require.Equal(t, false, found)
 			} else {
 				require.Equal(t, true, found)
-				require.Equal(t, *exp[i].e, e)
+				require.True(t, exp[i].e.Equals(e))
 			}
 
 		case EntryType:

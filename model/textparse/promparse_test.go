@@ -191,7 +191,7 @@ testmetric{label="\"bar\""} 1`
 			require.Equal(t, exp[i].m, string(m))
 			require.Equal(t, exp[i].t, ts)
 			require.Equal(t, exp[i].v, v)
-			require.Equal(t, exp[i].lset, res)
+			require.True(t, labels.Equal(exp[i].lset, res))
 
 		case EntryType:
 			m, typ := p.Type()
