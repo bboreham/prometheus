@@ -162,16 +162,18 @@ func TestSampleDelivery(t *testing.T) {
 	}
 }
 
-func TestMetadataDelivery(t *testing.T) {
+func newTestClientAndQueueManager(t *testing.T, cfg config.QueueConfig, mcfg config.MetadataConfig, flushDeadline time.Duration) (*TestWriteClient, *QueueManager) {
 	c := NewTestWriteClient()
-
 	dir := t.TempDir()
+	metrics := newQueueManagerMetrics(nil, "", "")
+	m := NewQueueManager(metrics, nil, nil, nil, dir, newEWMARate(ewmaWeight, shardUpdateDuration), cfg, mcfg, labels.EmptyLabels(), nil, c, flushDeadline, newPool(), newHighestTimestampMetric(), nil, false, false)
+	return c, m
+}
 
+func TestMetadataDelivery(t *testing.T) {
 	cfg := config.DefaultQueueConfig
 	mcfg := config.DefaultMetadataConfig
-
-	metrics := newQueueManagerMetrics(nil, "", "")
-	m := NewQueueManager(metrics, nil, nil, nil, dir, newEWMARate(ewmaWeight, shardUpdateDuration), cfg, mcfg, labels.EmptyLabels(), nil, c, defaultFlushDeadline, newPool(), newHighestTimestampMetric(), nil, false, false)
+	c, m := newTestClientAndQueueManager(t, cfg, mcfg, defaultFlushDeadline)
 	m.Start()
 	defer m.Stop()
 
@@ -200,17 +202,12 @@ func TestSampleDeliveryTimeout(t *testing.T) {
 	// Let's send one less sample than batch size, and wait the timeout duration
 	n := 9
 	samples, series := createTimeseries(n, n)
-	c := NewTestWriteClient()
 
 	cfg := config.DefaultQueueConfig
-	mcfg := config.DefaultMetadataConfig
 	cfg.MaxShards = 1
 	cfg.BatchSendDeadline = model.Duration(100 * time.Millisecond)
 
-	dir := t.TempDir()
-
-	metrics := newQueueManagerMetrics(nil, "", "")
-	m := NewQueueManager(metrics, nil, nil, nil, dir, newEWMARate(ewmaWeight, shardUpdateDuration), cfg, mcfg, labels.EmptyLabels(), nil, c, defaultFlushDeadline, newPool(), newHighestTimestampMetric(), nil, false, false)
+	c, m := newTestClientAndQueueManager(t, cfg, config.DefaultMetadataConfig, defaultFlushDeadline)
 	m.StoreSeries(series, 0)
 	m.Start()
 	defer m.Stop()
@@ -243,16 +240,8 @@ func TestSampleDeliveryOrder(t *testing.T) {
 		})
 	}
 
-	c := NewTestWriteClient()
+	c, m := newTestClientAndQueueManager(t, config.DefaultQueueConfig, config.DefaultMetadataConfig, defaultFlushDeadline)
 	c.expectSamples(samples, series)
-
-	dir := t.TempDir()
-
-	cfg := config.DefaultQueueConfig
-	mcfg := config.DefaultMetadataConfig
-
-	metrics := newQueueManagerMetrics(nil, "", "")
-	m := NewQueueManager(metrics, nil, nil, nil, dir, newEWMARate(ewmaWeight, shardUpdateDuration), cfg, mcfg, labels.EmptyLabels(), nil, c, defaultFlushDeadline, newPool(), newHighestTimestampMetric(), nil, false, false)
 	m.StoreSeries(series, 0)
 
 	m.Start()
@@ -329,17 +318,11 @@ func TestReshard(t *testing.T) {
 	nSamples := config.DefaultQueueConfig.Capacity * size
 	samples, series := createTimeseries(nSamples, nSeries)
 
-	c := NewTestWriteClient()
-	c.expectSamples(samples, series)
-
 	cfg := config.DefaultQueueConfig
-	mcfg := config.DefaultMetadataConfig
 	cfg.MaxShards = 1
 
-	dir := t.TempDir()
-
-	metrics := newQueueManagerMetrics(nil, "", "")
-	m := NewQueueManager(metrics, nil, nil, nil, dir, newEWMARate(ewmaWeight, shardUpdateDuration), cfg, mcfg, labels.EmptyLabels(), nil, c, defaultFlushDeadline, newPool(), newHighestTimestampMetric(), nil, false, false)
+	c, m := newTestClientAndQueueManager(t, cfg, config.DefaultMetadataConfig, defaultFlushDeadline)
+	c.expectSamples(samples, series)
 	m.StoreSeries(series, 0)
 
 	m.Start()
@@ -504,9 +487,7 @@ func TestShouldReshard(t *testing.T) {
 	cfg := config.DefaultQueueConfig
 	mcfg := config.DefaultMetadataConfig
 	for _, c := range cases {
-		metrics := newQueueManagerMetrics(nil, "", "")
-		client := NewTestWriteClient()
-		m := NewQueueManager(metrics, nil, nil, nil, "", newEWMARate(ewmaWeight, shardUpdateDuration), cfg, mcfg, labels.EmptyLabels(), nil, client, defaultFlushDeadline, newPool(), newHighestTimestampMetric(), nil, false, false)
+		_, m := newTestClientAndQueueManager(t, cfg, mcfg, defaultFlushDeadline)
 		m.numShards = c.startingShards
 		m.dataIn.incr(c.samplesIn)
 		m.dataOut.incr(c.samplesOut)
