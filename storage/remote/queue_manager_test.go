@@ -507,7 +507,8 @@ func TestShouldReshard(t *testing.T) {
 func createTimeseries(numSamples, numSeries int, extraLabels ...labels.Label) ([]record.RefSample, []record.RefSeries) {
 	samples := make([]record.RefSample, 0, numSamples)
 	series := make([]record.RefSeries, 0, numSeries)
-	b := labels.ScratchBuilder{}
+	st := labels.NewSymbolTable()
+	b := labels.NewScratchBuilder(st, 1+len(extraLabels))
 	for i := 0; i < numSeries; i++ {
 		name := fmt.Sprintf("test_metric_%d", i)
 		for j := 0; j < numSamples; j++ {
@@ -619,6 +620,7 @@ type TestWriteClient struct {
 	wg                      sync.WaitGroup
 	mtx                     sync.Mutex
 	buf                     []byte
+	symbolTable             *labels.SymbolTable
 }
 
 func NewTestWriteClient() *TestWriteClient {
@@ -627,6 +629,7 @@ func NewTestWriteClient() *TestWriteClient {
 		receivedSamples:  map[string][]prompb.Sample{},
 		expectedSamples:  map[string][]prompb.Sample{},
 		receivedMetadata: map[string][]prompb.MetricMetadata{},
+		symbolTable:      labels.NewSymbolTable(),
 	}
 }
 
@@ -746,7 +749,7 @@ func (c *TestWriteClient) Store(_ context.Context, req []byte, _ int) error {
 	}
 	count := 0
 	for _, ts := range reqProto.Timeseries {
-		labels := labelProtosToLabels(ts.Labels)
+		labels := labelProtosToLabels(c.symbolTable, ts.Labels)
 		seriesName := labels.Get("__name__")
 		for _, sample := range ts.Samples {
 			count++
@@ -918,6 +921,7 @@ func BenchmarkStartup(b *testing.B) {
 }
 
 func TestProcessExternalLabels(t *testing.T) {
+	st := labels.NewSymbolTable()
 	for _, tc := range []struct {
 		labels         labels.Labels
 		externalLabels []labels.Label

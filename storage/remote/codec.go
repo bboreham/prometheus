@@ -177,12 +177,13 @@ func ToQueryResult(ss storage.SeriesSet, sampleLimit int) (*prompb.QueryResult, 
 
 // FromQueryResult unpacks and sorts a QueryResult proto.
 func FromQueryResult(sortSeries bool, res *prompb.QueryResult) storage.SeriesSet {
+	st := labels.NewSymbolTable()
 	series := make([]storage.Series, 0, len(res.Timeseries))
 	for _, ts := range res.Timeseries {
 		if err := validateLabelsAndMetricName(ts.Labels); err != nil {
 			return errSeriesSet{err: err}
 		}
-		lbls := labelProtosToLabels(ts.Labels)
+		lbls := labelProtosToLabels(st, ts.Labels)
 		series = append(series, &concreteSeries{labels: lbls, floats: ts.Samples, histograms: ts.Histograms})
 	}
 
@@ -617,11 +618,11 @@ func FromLabelMatchers(matchers []*prompb.LabelMatcher) ([]*labels.Matcher, erro
 	return result, nil
 }
 
-func exemplarProtoToExemplar(ep prompb.Exemplar) exemplar.Exemplar {
+func exemplarProtoToExemplar(st *labels.SymbolTable, ep prompb.Exemplar) exemplar.Exemplar {
 	timestamp := ep.Timestamp
 
 	return exemplar.Exemplar{
-		Labels: labelProtosToLabels(ep.Labels),
+		Labels: labelProtosToLabels(st, ep.Labels),
 		Value:  ep.Value,
 		Ts:     timestamp,
 		HasTs:  timestamp != 0,
@@ -761,8 +762,8 @@ func LabelProtosToMetric(labelPairs []*prompb.Label) model.Metric {
 	return metric
 }
 
-func labelProtosToLabels(labelPairs []prompb.Label) labels.Labels {
-	b := labels.ScratchBuilder{}
+func labelProtosToLabels(st *labels.SymbolTable, labelPairs []prompb.Label) labels.Labels {
+	b := labels.NewScratchBuilder(st, len(labelPairs))
 	for _, l := range labelPairs {
 		b.Add(l.Name, l.Value)
 	}
