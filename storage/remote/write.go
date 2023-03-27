@@ -67,7 +67,7 @@ type WriteStorage struct {
 	queues            map[string]*QueueManager
 	samplesIn         *ewmaRate
 	flushDeadline     time.Duration
-	interner          *pool
+	symbolTable       *labels.SymbolTable
 	scraper           ReadyScrapeManager
 	quit              chan struct{}
 
@@ -89,7 +89,7 @@ func NewWriteStorage(logger log.Logger, reg prometheus.Registerer, dir string, f
 		flushDeadline:     flushDeadline,
 		samplesIn:         newEWMARate(ewmaWeight, shardUpdateDuration),
 		dir:               dir,
-		interner:          newPool(),
+		symbolTable:       labels.NewSymbolTable(),
 		scraper:           sm,
 		quit:              make(chan struct{}),
 		highestTimestamp: &maxTimestamp{
@@ -192,7 +192,7 @@ func (rws *WriteStorage) ApplyConfig(conf *config.Config) error {
 			rwConf.WriteRelabelConfigs,
 			c,
 			rws.flushDeadline,
-			rws.interner,
+			rws.symbolTable,
 			rws.highestTimestamp,
 			rws.scraper,
 			rwConf.SendExemplars,

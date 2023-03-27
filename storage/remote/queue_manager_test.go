@@ -477,29 +477,6 @@ func TestQueueFilledDeadlock(t *testing.T) {
 	}
 }
 
-func TestReleaseNoninternedString(t *testing.T) {
-	cfg := config.DefaultQueueConfig
-	mcfg := config.DefaultMetadataConfig
-	metrics := newQueueManagerMetrics(nil, "", "")
-	c := NewTestWriteClient()
-	m := NewQueueManager(metrics, nil, nil, nil, "", newEWMARate(ewmaWeight, shardUpdateDuration), cfg, mcfg, labels.EmptyLabels(), nil, c, defaultFlushDeadline, newPool(), newHighestTimestampMetric(), nil, false, false)
-	m.Start()
-	defer m.Stop()
-
-	for i := 1; i < 1000; i++ {
-		m.StoreSeries([]record.RefSeries{
-			{
-				Ref:    chunks.HeadSeriesRef(i),
-				Labels: labels.FromStrings("asdf", fmt.Sprintf("%d", i)),
-			},
-		}, 0)
-		m.SeriesReset(1)
-	}
-
-	metric := client_testutil.ToFloat64(noReferenceReleases)
-	require.Equal(t, 0.0, metric, "expected there to be no calls to release for strings that were not already interned: %d", int(metric))
-}
-
 func TestShouldReshard(t *testing.T) {
 	type testcase struct {
 		startingShards                           int

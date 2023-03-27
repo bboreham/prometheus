@@ -423,7 +423,7 @@ type QueueManager struct {
 	dataIn, dataDropped, dataOut, dataOutDuration *ewmaRate
 
 	metrics              *queueManagerMetrics
-	interner             *pool
+	symbolTable          *labels.SymbolTable
 	highestRecvTimestamp *maxTimestamp
 }
 
@@ -445,7 +445,7 @@ func NewQueueManager(
 	relabelConfigs []*relabel.Config,
 	client WriteClient,
 	flushDeadline time.Duration,
-	interner *pool,
+	symbolTable *labels.SymbolTable,
 	highestRecvTimestamp *maxTimestamp,
 	sm ReadyScrapeManager,
 	enableExemplarRemoteWrite bool,
@@ -487,7 +487,7 @@ func NewQueueManager(
 		dataOutDuration: newEWMARate(ewmaWeight, shardUpdateDuration),
 
 		metrics:              metrics,
-		interner:             interner,
+		symbolTable:          symbolTable,
 		highestRecvTimestamp: highestRecvTimestamp,
 	}
 
@@ -806,13 +806,6 @@ func (t *QueueManager) Stop() {
 	if t.mcfg.Send {
 		t.metadataWatcher.Stop()
 	}
-
-	// On shutdown, release the strings in the labels from the intern pool.
-	t.seriesMtx.Lock()
-	for _, labels := range t.seriesLabels {
-		t.releaseLabels(labels)
-	}
-	t.seriesMtx.Unlock()
 	t.metrics.unregister()
 }
 
@@ -826,19 +819,11 @@ func (t *QueueManager) StoreSeries(series []record.RefSeries, index int) {
 		// Just make sure all the Refs of Series will insert into seriesSegmentIndexes map for tracking.
 		t.seriesSegmentIndexes[s.Ref] = index
 
-		ls := processExternalLabels(s.Labels, t.externalLabels)
+		ls := processExternalLabels(t.symbolTable, s.Labels, t.externalLabels)
 		lbls, keep := relabel.Process(ls, t.relabelConfigs...)
 		if !keep || lbls.IsEmpty() {
 			t.droppedSeries[s.Ref] = struct{}{}
 			continue
-		}
-		t.internLabels(lbls)
-
-		// We should not ever be replacing a series labels in the map, but just
-		// in case we do we need to ensure we do not leak the replaced interned
-		// strings.
-		if orig, ok := t.seriesLabels[s.Ref]; ok {
-			t.releaseLabels(orig)
 		}
 		t.seriesLabels[s.Ref] = lbls
 	}
@@ -867,7 +852,6 @@ func (t *QueueManager) SeriesReset(index int) {
 	for k, v := range t.seriesSegmentIndexes {
 		if v < index {
 			delete(t.seriesSegmentIndexes, k)
-			t.releaseLabels(t.seriesLabels[k])
 			delete(t.seriesLabels, k)
 			delete(t.droppedSeries, k)
 		}
@@ -888,22 +872,14 @@ func (t *QueueManager) client() WriteClient {
 	return t.storeClient
 }
 
-func (t *QueueManager) internLabels(lbls labels.Labels) {
-	lbls.InternStrings(t.interner.intern)
-}
-
-func (t *QueueManager) releaseLabels(ls labels.Labels) {
-	ls.ReleaseStrings(t.interner.release)
-}
-
 // processExternalLabels merges externalLabels into ls. If ls contains
 // a label in externalLabels, the value in ls wins.
-func processExternalLabels(ls labels.Labels, externalLabels []labels.Label) labels.Labels {
+func processExternalLabels(st *labels.SymbolTable, ls labels.Labels, externalLabels []labels.Label) labels.Labels {
 	if len(externalLabels) == 0 {
 		return ls
 	}
 
-	b := labels.NewScratchBuilder(ls.Len() + len(externalLabels))
+	b := labels.NewScratchBuilder(st, ls.Len()+len(externalLabels))
 	j := 0
 	ls.Range(func(l labels.Label) {
 		for j < len(externalLabels) && l.Name > externalLabels[j].Name {
