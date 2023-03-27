@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -59,23 +60,23 @@ func TestRemoteWriteHandler(t *testing.T) {
 	for _, ts := range writeRequestFixture.Timeseries {
 		labels := labelProtosToLabels(ts.Labels)
 		for _, s := range ts.Samples {
-			require.Equal(t, mockSample{labels, s.Timestamp, s.Value}, appendable.samples[i])
+			require.True(t, mockSample{labels, s.Timestamp, s.Value}.Equals(appendable.samples[i]))
 			i++
 		}
 
 		for _, e := range ts.Exemplars {
 			exemplarLabels := labelProtosToLabels(e.Labels)
-			require.Equal(t, mockExemplar{labels, exemplarLabels, e.Timestamp, e.Value}, appendable.exemplars[j])
+			require.True(t, mockExemplar{labels, exemplarLabels, e.Timestamp, e.Value}.Equals(appendable.exemplars[j]))
 			j++
 		}
 
 		for _, hp := range ts.Histograms {
 			if hp.IsFloatHistogram() {
 				fh := FloatHistogramProtoToFloatHistogram(hp)
-				require.Equal(t, mockHistogram{labels, hp.Timestamp, nil, fh}, appendable.histograms[k])
+				require.True(t, mockHistogram{labels, hp.Timestamp, nil, fh}.Equals(appendable.histograms[k]))
 			} else {
 				h := HistogramProtoToHistogram(hp)
-				require.Equal(t, mockHistogram{labels, hp.Timestamp, h, nil}, appendable.histograms[k])
+				require.True(t, mockHistogram{labels, hp.Timestamp, h, nil}.Equals(appendable.histograms[k]))
 			}
 
 			k++
@@ -278,6 +279,10 @@ type mockSample struct {
 	v float64
 }
 
+func (ms mockSample) Equals(b mockSample) bool {
+	return ms.t == b.t && ms.v == b.v && labels.Equal(ms.l, b.l)
+}
+
 type mockExemplar struct {
 	l  labels.Labels
 	el labels.Labels
@@ -285,11 +290,19 @@ type mockExemplar struct {
 	v  float64
 }
 
+func (me mockExemplar) Equals(b mockExemplar) bool {
+	return me.t == b.t && me.v == b.v && labels.Equal(me.l, b.l) && labels.Equal(me.el, b.el)
+}
+
 type mockHistogram struct {
 	l  labels.Labels
 	t  int64
 	h  *histogram.Histogram
 	fh *histogram.FloatHistogram
+}
+
+func (mh mockHistogram) Equals(b mockHistogram) bool {
+	return mh.t == b.t && labels.Equal(mh.l, b.l) && reflect.DeepEqual(mh.h, b.h) && reflect.DeepEqual(mh.fh, b.fh)
 }
 
 func (m *mockAppendable) Appender(_ context.Context) storage.Appender {

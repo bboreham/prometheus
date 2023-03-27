@@ -979,7 +979,7 @@ func TestProcessExternalLabels(t *testing.T) {
 			expected:       labels.FromStrings("a", "b", "c", "d", "e", "f"),
 		},
 	} {
-		require.Equal(t, tc.expected, processExternalLabels(tc.labels, tc.externalLabels))
+		require.True(t, labels.Equal(tc.expected, processExternalLabels(st, tc.labels, tc.externalLabels)))
 	}
 }
 

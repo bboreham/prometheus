@@ -484,7 +484,10 @@ func TestSampleAndChunkQueryableClient(t *testing.T) {
 				got = append(got, ss.At().Labels())
 			}
 			require.NoError(t, ss.Err())
-			require.Equal(t, tc.expectedSeries, got)
+			require.Equal(t, len(tc.expectedSeries), len(got))
+			for i := range got {
+				require.True(t, labels.Equal(tc.expectedSeries[i], got[i]))
+			}
 		})
 	}
 }
