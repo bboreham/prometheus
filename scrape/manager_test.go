@@ -438,8 +438,8 @@ func TestPopulateLabels(t *testing.T) {
 			require.NoError(t, err)
 		}
 		require.Equal(t, c.in, in)
-		require.Equal(t, c.res, res)
-		require.Equal(t, c.resOrig, orig)
+		require.True(t, labels.Equal(c.res, res))
+		require.True(t, labels.Equal(c.resOrig, orig))
 	}
 }
 

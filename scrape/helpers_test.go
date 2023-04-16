@@ -59,6 +59,11 @@ type floatSample struct {
 	f      float64
 }
 
+// DeepEqual implements the contract of package deepequal for tests.
+func (a floatSample) DeepEqual(b floatSample) bool {
+	return a.t == b.t && a.f == b.f && labels.Equal(a.metric, b.metric)
+}
+
 type histogramSample struct {
 	t  int64
 	h  *histogram.Histogram

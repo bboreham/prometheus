@@ -49,6 +49,7 @@ import (
 	"github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/util/deepequal"
 	"github.com/prometheus/prometheus/util/teststorage"
 	"github.com/prometheus/prometheus/util/testutil"
 )
@@ -1521,7 +1522,7 @@ func TestScrapeLoopAppend(t *testing.T) {
 		}
 
 		t.Logf("Test:%s", test.title)
-		require.Equal(t, expected, app.resultFloats)
+		deepequal.RequireEqual(t, expected, app.resultFloats)
 	}
 }
 
@@ -1591,7 +1592,7 @@ func TestScrapeLoopAppendForConflictingPrefixedLabels(t *testing.T) {
 
 			require.NoError(t, slApp.Commit())
 
-			require.Equal(t, []floatSample{
+			deepequal.RequireEqual(t, []floatSample{
 				{
 					metric: labels.FromStrings(tc.expected...),
 					t:      timestamp.FromTime(time.Date(2000, 1, 1, 1, 0, 0, 0, time.UTC)),
@@ -1720,7 +1721,7 @@ func TestScrapeLoopAppendSampleLimit(t *testing.T) {
 			f:      1,
 		},
 	}
-	require.Equal(t, want, resApp.rolledbackFloats, "Appended samples not as expected:\n%s", appender)
+	deepequal.RequireEqual(t, want, resApp.rolledbackFloats, "Appended samples not as expected:\n%s", appender)
 
 	now = time.Now()
 	slApp = sl.appender(context.Background())
@@ -2325,9 +2326,9 @@ metric: <
 			_, _, _, err := sl.append(app, buf.Bytes(), test.contentType, now)
 			require.NoError(t, err)
 			require.NoError(t, app.Commit())
-			require.Equal(t, test.floats, app.resultFloats)
-			require.Equal(t, test.histograms, app.resultHistograms)
-			require.Equal(t, test.exemplars, app.resultExemplars)
+			deepequal.RequireEqual(t, test.floats, app.resultFloats)
+			deepequal.RequireEqual(t, test.histograms, app.resultHistograms)
+			deepequal.RequireEqual(t, test.exemplars, app.resultExemplars)
 		})
 	}
 }
@@ -2397,8 +2398,8 @@ func TestScrapeLoopAppendExemplarSeries(t *testing.T) {
 		require.NoError(t, app.Commit())
 	}
 
-	require.Equal(t, samples, app.resultFloats)
-	require.Equal(t, exemplars, app.resultExemplars)
+	deepequal.RequireEqual(t, samples, app.resultFloats)
+	deepequal.RequireEqual(t, exemplars, app.resultExemplars)
 }
 
 func TestScrapeLoopRunReportsTargetDownOnScrapeError(t *testing.T) {
@@ -2529,7 +2530,7 @@ func TestScrapeLoopAppendGracefullyIfAmendOrOutOfOrderOrOutOfBounds(t *testing.T
 			f:      1,
 		},
 	}
-	require.Equal(t, want, app.resultFloats, "Appended samples not as expected:\n%s", appender)
+	deepequal.RequireEqual(t, want, app.resultFloats, "Appended samples not as expected:\n%s", appender)
 	require.Equal(t, 4, total)
 	require.Equal(t, 4, added)
 	require.Equal(t, 1, seriesAdded)
