@@ -891,6 +891,11 @@ func NewScratchBuilder(s *SymbolTable, n int) ScratchBuilder {
 	return ScratchBuilder{syms: s, add: make([]Label, 0, n)}
 }
 
+func (b *ScratchBuilder) ResetSymbolTable(s *SymbolTable) {
+	b.syms = s
+	b.Reset()
+}
+
 func (b *ScratchBuilder) Reset() {
 	b.add = b.add[:0]
 	b.output = EmptyLabels()
