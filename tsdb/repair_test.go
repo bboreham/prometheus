@@ -112,10 +112,9 @@ func TestRepairBadIndexVersion(t *testing.T) {
 	}
 
 	require.NoError(t, p.Err())
-	require.Equal(t, []labels.Labels{
-		labels.FromStrings("a", "1", "b", "1"),
-		labels.FromStrings("a", "2", "b", "1"),
-	}, res)
+	require.Equal(t, 2, len(res))
+	require.True(t, labels.Equal(labels.FromStrings("a", "1", "b", "1"), res[0]))
+	require.True(t, labels.Equal(labels.FromStrings("a", "2", "b", "1"), res[1]))
 
 	meta, _, err := readMetaFile(tmpDbDir)
 	require.NoError(t, err)

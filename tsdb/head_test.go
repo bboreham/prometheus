@@ -50,6 +50,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tombstones"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"github.com/prometheus/prometheus/tsdb/wlog"
+	"github.com/prometheus/prometheus/util/deepequal"
 )
 
 func newTestHead(t testing.TB, chunkRange int64, compressWAL wlog.CompressionType, oooEnabled bool) (*Head, *wlog.WL) {
@@ -160,7 +161,7 @@ func readTestWAL(t testing.TB, dir string) (recs []interface{}) {
 		require.NoError(t, sr.Close())
 	}()
 
-	var dec record.Decoder
+	dec := record.NewDecoder(labels.NewSymbolTable())
 	r := wlog.NewReader(sr)
 
 	for r.Next() {
@@ -663,10 +664,10 @@ func TestHead_ReadWAL(t *testing.T) {
 			s50 := head.series.getByID(50)
 			s100 := head.series.getByID(100)
 
-			require.Equal(t, labels.FromStrings("a", "1"), s10.lset)
+			require.True(t, labels.Equal(labels.FromStrings("a", "1"), s10.lset))
 			require.Equal(t, (*memSeries)(nil), s11) // Series without samples should be garbage collected at head.Init().
-			require.Equal(t, labels.FromStrings("a", "4"), s50.lset)
-			require.Equal(t, labels.FromStrings("a", "3"), s100.lset)
+			require.True(t, labels.Equal(labels.FromStrings("a", "4"), s50.lset))
+			require.True(t, labels.Equal(labels.FromStrings("a", "3"), s100.lset))
 
 			expandChunk := func(c chunkenc.Iterator) (x []sample) {
 				for c.Next() == chunkenc.ValFloat {
@@ -693,7 +694,7 @@ func TestHead_ReadWAL(t *testing.T) {
 			require.NoError(t, err)
 			e, err := q.Select(0, 1000, []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "a", "1")})
 			require.NoError(t, err)
-			require.Equal(t, e[0].Exemplars[0], exemplar.Exemplar{Ts: 100, Value: 1, Labels: labels.FromStrings("traceID", "asdf")})
+			require.True(t, e[0].Exemplars[0].Equals(exemplar.Exemplar{Ts: 100, Value: 1, Labels: labels.FromStrings("traceID", "asdf")}))
 		})
 	}
 }
@@ -3584,7 +3585,7 @@ func TestChunkSnapshot(t *testing.T) {
 		})
 		require.NoError(t, err)
 		// Verifies both existence of right exemplars and order of exemplars in the buffer.
-		require.Equal(t, expExemplars, actExemplars)
+		deepequal.RequireEqual(t, expExemplars, actExemplars)
 	}
 
 	var (

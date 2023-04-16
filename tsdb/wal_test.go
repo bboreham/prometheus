@@ -35,6 +35,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/record"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
 	"github.com/prometheus/prometheus/tsdb/wlog"
+	"github.com/prometheus/prometheus/util/deepequal"
 )
 
 func TestSegmentWAL_cut(t *testing.T) {
@@ -148,7 +149,7 @@ func TestSegmentWAL_Truncate(t *testing.T) {
 		readSeries = append(readSeries, s...)
 	}, nil, nil))
 
-	require.Equal(t, expected, readSeries)
+	deepequal.RequireEqual(t, expected, readSeries)
 }
 
 // Symmetrical test of reading and writing to the WAL via its main interface.
@@ -214,9 +215,9 @@ func TestSegmentWAL_Log_Restore(t *testing.T) {
 
 		require.NoError(t, r.Read(serf, smplf, delf))
 
-		require.Equal(t, recordedSamples, resultSamples)
-		require.Equal(t, recordedSeries, resultSeries)
-		require.Equal(t, recordedDeletes, resultDeletes)
+		deepequal.RequireEqual(t, recordedSamples, resultSamples)
+		deepequal.RequireEqual(t, recordedSeries, resultSeries)
+		deepequal.RequireEqual(t, recordedDeletes, resultDeletes)
 
 		series := series[k : k+(numMetrics/iterations)]
 
@@ -510,7 +511,7 @@ func TestMigrateWAL_Fuzz(t *testing.T) {
 
 	r := wlog.NewReader(sr)
 	var res []interface{}
-	var dec record.Decoder
+	dec := record.NewDecoder(labels.NewSymbolTable())
 
 	for r.Next() {
 		rec := r.Record()
@@ -534,7 +535,7 @@ func TestMigrateWAL_Fuzz(t *testing.T) {
 	}
 	require.NoError(t, r.Err())
 
-	require.Equal(t, []interface{}{
+	deepequal.RequireEqual(t, []interface{}{
 		[]record.RefSeries{
 			{Ref: 100, Labels: labels.FromStrings("abc", "def", "123", "456")},
 			{Ref: 1, Labels: labels.FromStrings("abc", "def2", "1234", "4567")},

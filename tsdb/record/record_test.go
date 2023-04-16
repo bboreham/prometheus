@@ -25,11 +25,12 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
+	"github.com/prometheus/prometheus/util/deepequal"
 )
 
 func TestRecord_EncodeDecode(t *testing.T) {
 	var enc Encoder
-	var dec Decoder
+	dec := NewDecoder(labels.NewSymbolTable())
 
 	series := []RefSeries{
 		{
@@ -45,7 +46,7 @@ func TestRecord_EncodeDecode(t *testing.T) {
 	}
 	decSeries, err := dec.Series(enc.Series(series, nil), nil)
 	require.NoError(t, err)
-	require.Equal(t, series, decSeries)
+	deepequal.RequireEqual(t, series, decSeries)
 
 	metadata := []RefMetadata{
 		{
@@ -108,7 +109,7 @@ func TestRecord_EncodeDecode(t *testing.T) {
 	}
 	decExemplars, err := dec.Exemplars(enc.Exemplars(exemplars, nil), nil)
 	require.NoError(t, err)
-	require.Equal(t, exemplars, decExemplars)
+	deepequal.RequireEqual(t, exemplars, decExemplars)
 
 	histograms := []RefHistogramSample{
 		{
