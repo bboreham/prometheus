@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
 
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
@@ -154,7 +155,8 @@ func Checkpoint(logger log.Logger, w *WL, from, to int, keep func(id chunks.Head
 		tstones          []tombstones.Stone
 		exemplars        []record.RefExemplar
 		metadata         []record.RefMetadata
-		dec              record.Decoder
+		st               = labels.NewSymbolTable() // TODO: should this be linked to something else?
+		dec              = record.NewDecoder(st)
 		enc              record.Encoder
 		buf              []byte
 		recs             [][]byte

@@ -32,6 +32,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
@@ -855,6 +856,7 @@ func newWALReader(files []*segmentFile, l log.Logger) *walReader {
 		files:  files,
 		buf:    make([]byte, 0, 128*4096),
 		crc32:  newCRC32(),
+		dec:    record.NewDecoder(labels.NewSymbolTable()), // TODO: should this symbol table come from somewhere else?
 	}
 }
 
