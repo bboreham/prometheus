@@ -214,6 +214,11 @@ func (s Sample) MarshalJSON() ([]byte, error) {
 	return json.Marshal(h)
 }
 
+// DeepEqual implements the contract of package deepequal for tests.
+func (s Sample) DeepEqual(b Sample) bool {
+	return s.T == b.T && s.F == b.F && s.H.Equals(b.H) && labels.Equal(s.Metric, b.Metric)
+}
+
 // Vector is basically only an alias for []Sample, but the contract is that
 // in a Vector, all Samples have the same timestamp.
 type Vector []Sample

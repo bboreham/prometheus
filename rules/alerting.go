@@ -335,6 +335,8 @@ func (r *AlertingRule) Eval(ctx context.Context, ts time.Time, query QueryFunc, 
 	// or update the expression value for existing elements.
 	resultFPs := map[uint64]struct{}{}
 
+	lb := labels.NewBuilder(labels.EmptyLabels())
+	sb := labels.NewScratchBuilder(labels.NewSymbolTable(), 0)
 	var vec promql.Vector
 	alerts := make(map[uint64]*Alert, len(res))
 	for _, smpl := range res {
@@ -370,14 +372,14 @@ func (r *AlertingRule) Eval(ctx context.Context, ts time.Time, query QueryFunc, 
 			return result
 		}
 
-		lb := labels.NewBuilder(smpl.Metric).Del(labels.MetricName)
-
+		lb.Reset(smpl.Metric)
+		lb.Del(labels.MetricName)
 		r.labels.Range(func(l labels.Label) {
 			lb.Set(l.Name, expand(l.Value))
 		})
 		lb.Set(labels.AlertName, r.Name())
 
-		sb := labels.ScratchBuilder{}
+		sb.Reset()
 		r.annotations.Range(func(a labels.Label) {
 			sb.Add(a.Name, expand(a.Value))
 		})
