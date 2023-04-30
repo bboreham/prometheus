@@ -16,7 +16,6 @@ package discovery
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"sync"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/prometheus/common/config"
 
 	"github.com/prometheus/prometheus/discovery/targetgroup"
+	"github.com/prometheus/prometheus/util/deepequal"
 )
 
 var (
@@ -418,7 +418,7 @@ func (m *Manager) registerProviders(cfgs Configs, setName string) int {
 	)
 	add := func(cfg Config) {
 		for _, p := range m.providers {
-			if reflect.DeepEqual(cfg, p.config) {
+			if deepequal.DeepEqual(cfg, p.config) {
 				p.newSubs[setName] = struct{}{}
 				added = true
 				return
