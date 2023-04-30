@@ -4018,7 +4018,7 @@ func TestParseSeries(t *testing.T) {
 
 		if !test.fail {
 			require.NoError(t, err)
-			require.Equal(t, test.expectedMetric, metric, "error on input '%s'", test.input)
+			require.True(t, labels.Equal(test.expectedMetric, metric), "error on input '%s'", test.input)
 			require.Equal(t, test.expectedValues, vals, "error in input '%s'", test.input)
 		} else {
 			require.Error(t, err)
