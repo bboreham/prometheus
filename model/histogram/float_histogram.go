@@ -309,7 +309,7 @@ func (h *FloatHistogram) Sub(other *FloatHistogram) *FloatHistogram {
 // but they must represent the same bucket layout to match.
 func (h *FloatHistogram) Equals(h2 *FloatHistogram) bool {
 	if h2 == nil {
-		return false
+		return h == nil
 	}
 
 	if h.Schema != h2.Schema || h.ZeroThreshold != h2.ZeroThreshold ||
