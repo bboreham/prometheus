@@ -36,6 +36,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/util/deepequal"
 	"github.com/prometheus/prometheus/util/teststorage"
 )
 
@@ -427,5 +428,5 @@ func TestFederationWithNativeHistograms(t *testing.T) {
 	// TODO(codesome): Once PromQL is able to set the CounterResetHint on histograms,
 	// test it with switching histogram types for metric families.
 	require.Equal(t, 4, metricFamilies)
-	require.Equal(t, expVec, actVec)
+	deepequal.RequireEqual(t, expVec, actVec)
 }

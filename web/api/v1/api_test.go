@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/prometheus/prometheus/prompb"
+	"github.com/prometheus/prometheus/util/deepequal"
 	"github.com/prometheus/prometheus/util/stats"
 
 	"github.com/go-kit/log"
@@ -572,7 +573,7 @@ func TestGetSeries(t *testing.T) {
 				r := res.data.([]labels.Labels)
 				sort.Sort(byLabels(tc.expected))
 				sort.Sort(byLabels(r))
-				require.Equal(t, tc.expected, r)
+				deepequal.RequireEqual(t, tc.expected, r)
 			}
 		})
 	}
@@ -2729,7 +2730,7 @@ func assertAPIError(t *testing.T, got *apiError, exp errorType) {
 func assertAPIResponse(t *testing.T, got, exp interface{}) {
 	t.Helper()
 
-	require.Equal(t, exp, got)
+	deepequal.RequireEqual(t, exp, got)
 }
 
 func assertAPIResponseLength(t *testing.T, got interface{}, expLen int) {
