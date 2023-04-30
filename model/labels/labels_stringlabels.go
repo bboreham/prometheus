@@ -477,6 +477,11 @@ func Equal(a, b Labels) bool {
 	return true
 }
 
+// DeepEqual implements the contract of package deepequal for tests.
+func (ls Labels) DeepEqual(b Labels) bool {
+	return Equal(ls, b)
+}
+
 // Map returns a string map of the labels.
 func (ls Labels) Map() map[string]string {
 	m := make(map[string]string, len(ls.data))
