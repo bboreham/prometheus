@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"reflect"
 	"time"
 
 	"github.com/go-kit/log"
@@ -28,6 +27,7 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/scrape"
+	"github.com/prometheus/prometheus/util/deepequal"
 )
 
 type sdCheckResult struct {
@@ -139,7 +139,7 @@ func getSDCheckResult(targetGroups []*targetgroup.Group, scrapeConfig *config.Sc
 
 			duplicateRes := false
 			for _, sdCheckRes := range sdCheckResults {
-				if reflect.DeepEqual(sdCheckRes, result) {
+				if deepequal.DeepEqual(sdCheckRes, result) {
 					duplicateRes = true
 					break
 				}
