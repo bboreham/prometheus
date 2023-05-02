@@ -3517,8 +3517,8 @@ func TestChunkSnapshot(t *testing.T) {
 	}()
 
 	type ex struct {
-		seriesLabels labels.Labels
-		e            exemplar.Exemplar
+		SeriesLabels labels.Labels
+		E            exemplar.Exemplar
 	}
 
 	numSeries := 10
@@ -3532,15 +3532,15 @@ func TestChunkSnapshot(t *testing.T) {
 
 	addExemplar := func(app storage.Appender, ref storage.SeriesRef, lbls labels.Labels, ts int64) {
 		e := ex{
-			seriesLabels: lbls,
-			e: exemplar.Exemplar{
+			SeriesLabels: lbls,
+			E: exemplar.Exemplar{
 				Labels: labels.FromStrings("traceID", fmt.Sprintf("%d", rand.Int())),
 				Value:  rand.Float64(),
 				Ts:     ts,
 			},
 		}
 		expExemplars = append(expExemplars, e)
-		_, err := app.AppendExemplar(ref, e.seriesLabels, e.e)
+		_, err := app.AppendExemplar(ref, e.SeriesLabels, e.E)
 		require.NoError(t, err)
 	}
 
@@ -3578,8 +3578,8 @@ func TestChunkSnapshot(t *testing.T) {
 		actExemplars := make([]ex, 0, len(expExemplars))
 		err := head.exemplars.IterateExemplars(func(seriesLabels labels.Labels, e exemplar.Exemplar) error {
 			actExemplars = append(actExemplars, ex{
-				seriesLabels: seriesLabels,
-				e:            e,
+				SeriesLabels: seriesLabels,
+				E:            e,
 			})
 			return nil
 		})
