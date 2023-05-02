@@ -18,7 +18,6 @@ package labels
 import (
 	"bytes"
 	"encoding/json"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -501,12 +500,6 @@ func EmptyLabels() Labels {
 
 func yoloString(b []byte) string {
 	return *((*string)(unsafe.Pointer(&b)))
-}
-
-func yoloBytes(s string) (b []byte) {
-	*(*string)(unsafe.Pointer(&b)) = s
-	(*reflect.SliceHeader)(unsafe.Pointer(&b)).Cap = len(s)
-	return
 }
 
 // New returns a sorted Labels from the given labels.
