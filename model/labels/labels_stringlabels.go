@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/cespare/xxhash/v2"
@@ -55,6 +56,7 @@ type Labels struct {
 
 // SymbolTable is used to map strings into numbers so they can be packed together.
 type SymbolTable struct {
+	mx     sync.Mutex
 	byNum  []string
 	byName map[string]int
 }
@@ -67,6 +69,8 @@ func NewSymbolTable() *SymbolTable {
 
 // ToNum maps a string to an integer, adding the string to the table if it is not already there.
 func (t *SymbolTable) ToNum(name string) int {
+	t.mx.Lock()
+	defer t.mx.Unlock()
 	if i, found := t.byName[name]; found {
 		return i
 	}
@@ -78,6 +82,8 @@ func (t *SymbolTable) ToNum(name string) int {
 
 // ToName maps an integer to a string.
 func (t *SymbolTable) ToName(num int) string {
+	t.mx.Lock()
+	defer t.mx.Unlock()
 	return t.byNum[num]
 }
 
