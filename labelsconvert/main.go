@@ -104,6 +104,9 @@ func convertAst(fset *token.FileSet, node ast.Node) {
 			call.Args = append(call.Args, lName, lValue)
 		}
 
+		if len(call.Args) == 0 { // Special-case empty labels.
+			call.Fun = &ast.Ident{Name: "labels.EmptyLabels", NamePos: clExpr.Pos()}
+		}
 		c.Replace(call)
 
 		return true
