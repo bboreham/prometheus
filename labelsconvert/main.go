@@ -50,7 +50,7 @@ func convertAst(fset *token.FileSet, node ast.Node) {
 			for _, elem := range comp.Elts {
 				kvPair, ok := elem.(*ast.KeyValueExpr)
 				if !ok {
-					continue
+					return true
 				}
 				switch kvPair.Key.(*ast.Ident).Name {
 				case "Name":
@@ -63,10 +63,10 @@ func convertAst(fset *token.FileSet, node ast.Node) {
 			}
 			if lName == nil {
 				printError("Label name not found")
-				continue
+				return true
 			} else if lValue == nil {
 				printError("Label value not found")
-				continue
+				return true
 			}
 			call.Args = append(call.Args, lName, lValue)
 		}
