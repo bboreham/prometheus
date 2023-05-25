@@ -12,6 +12,24 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 )
 
+func exprIsLabelsDotLabels(expr ast.Expr) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	if sel.Sel.Name != "Labels" {
+		return false
+	}
+	x, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	if x.Name != "labels" {
+		return false
+	}
+	return true
+}
+
 func convertAst(fset *token.FileSet, node ast.Node) {
 	// Traverse the AST and convert any labels.Labels to labels.FromStrings
 	astutil.Apply(node, func(c *astutil.Cursor) bool {
@@ -27,11 +45,26 @@ func convertAst(fset *token.FileSet, node ast.Node) {
 		if !ok {
 			return true
 		}
-		selectorExpr, ok := clExpr.Type.(*ast.SelectorExpr)
-		if !ok || selectorExpr.Sel.Name != "Labels" {
-			return true
-		}
 
+		nodeType := clExpr.Type
+		if nodeType == nil {
+			nodeType = c.Parent().(*ast.CompositeLit).Type
+			if arrayType, ok := nodeType.(*ast.ArrayType); !ok {
+				return true
+			} else if !exprIsLabelsDotLabels(arrayType.Elt) {
+				return true
+			}
+		} else {
+			// Otherwise we look for 'labels.Labels' directly
+			switch expr := nodeType.(type) {
+			case *ast.SelectorExpr:
+				if !exprIsLabelsDotLabels(expr) {
+					return true
+				}
+			default:
+				return true
+			}
+		}
 		// We're going to rewrite the struct initializer as a function call.
 		call := &ast.CallExpr{
 			Fun:    &ast.Ident{Name: "labels.FromStrings", NamePos: clExpr.Pos()},
