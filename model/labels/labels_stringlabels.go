@@ -23,6 +23,7 @@ import (
 	"unsafe"
 
 	"github.com/cespare/xxhash/v2"
+	"github.com/grailbio/base/simd"
 	"github.com/prometheus/common/model"
 	"golang.org/x/exp/slices"
 )
@@ -425,24 +426,12 @@ func FromStrings(ss ...string) Labels {
 // TODO: replace with Less function - Compare is never needed.
 // TODO: just compare the underlying strings when we don't need alphanumeric sorting.
 func Compare(a, b Labels) int {
-	if len(a.data) == 0 {
-		return -len(b.data)
-	} else if len(b.data) == 0 {
-		return len(a.data)
-	}
 	// Find the first byte in the string where a and b differ.
-	shorter, longer := a.data, b.data
-	if len(b.data) < len(a.data) {
-		shorter, longer = b.data, a.data
+	shorter, longer := yoloBytes(a.data), yoloBytes(b.data)
+	if len(longer) < len(shorter) {
+		shorter, longer = longer, shorter
 	}
-	i := 0
-	_ = longer[len(shorter)-1] // Get compiler to do bounds-check on longer just once here.
-	for ; i < len(shorter); i++ {
-		if shorter[i] != longer[i] {
-			break
-		}
-	}
-	firstCharDifferent := i
+	firstCharDifferent := simd.FirstUnequal8Unsafe(shorter, longer[:len(shorter)], 0)
 	if firstCharDifferent == len(shorter) {
 		if len(shorter) == len(longer) {
 			return 0
@@ -456,7 +445,7 @@ func Compare(a, b Labels) int {
 
 	// Now we know that there is some difference before the end of a and b.
 	// Go back through the fields and find which field that difference is in.
-	i = 0
+	i := 0
 	for {
 		size, nextI := decodeSize(a.data, i)
 		if nextI+size > firstCharDifferent {
