@@ -48,8 +48,11 @@ func convertAst(fset *token.FileSet, node ast.Node) {
 
 		nodeType := clExpr.Type
 		if nodeType == nil {
-			nodeType = c.Parent().(*ast.CompositeLit).Type
-			if arrayType, ok := nodeType.(*ast.ArrayType); !ok {
+			parentComposite, ok := c.Parent().(*ast.CompositeLit)
+			if !ok {
+				return true
+			}
+			if arrayType, ok := parentComposite.Type.(*ast.ArrayType); !ok {
 				return true
 			} else if !exprIsLabelsDotLabels(arrayType.Elt) {
 				return true
