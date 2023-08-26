@@ -175,26 +175,33 @@ func (h *headIndexReader) Series(ref storage.SeriesRef, builder *labels.ScratchB
 		})
 	}
 
-	if s.headChunks != nil {
-		var maxTime int64
-		var i, j int
-		for i = s.headChunks.len() - 1; i >= 0; i-- {
-			chk := s.headChunks.atOffset(i)
-			if i == 0 {
-				// Set the head chunk as open (being appended to) for the first headChunk.
-				maxTime = math.MaxInt64
-			} else {
-				maxTime = chk.maxTime
-			}
-			if chk.OverlapsClosedInterval(h.mint, h.maxt) {
-				*chks = append(*chks, chunks.Meta{
-					MinTime: chk.minTime,
-					MaxTime: maxTime,
-					Ref:     chunks.ChunkRef(chunks.NewHeadChunkRef(s.ref, s.headChunkID(len(s.mmappedChunks)+j))),
-				})
-			}
-			j++
+	// The headChunks list goes from newest to oldest but we need to return oldest to newest.
+	// Copy the linked list into a slice, so we can easily walk it backwards.
+	var chunkArray [256]*memChunk
+	revChunks := chunkArray[:0]
+	for chk := s.headChunks; chk != nil; chk = chk.prev {
+		revChunks = append(revChunks, chk)
+	}
+	headChunksLen := len(revChunks)
+
+	var maxTime int64
+	var i, j int
+	for i = headChunksLen - 1; i >= 0; i-- {
+		chk := revChunks[i]
+		if i == 0 {
+			// Set the head chunk as open (being appended to) for the first headChunk.
+			maxTime = math.MaxInt64
+		} else {
+			maxTime = chk.maxTime
 		}
+		if chk.OverlapsClosedInterval(h.mint, h.maxt) {
+			*chks = append(*chks, chunks.Meta{
+				MinTime: chk.minTime,
+				MaxTime: maxTime,
+				Ref:     chunks.ChunkRef(chunks.NewHeadChunkRef(s.ref, s.headChunkID(len(s.mmappedChunks)+j))),
+			})
+		}
+		j++
 	}
 
 	return nil
@@ -703,19 +710,16 @@ func (s *memSeries) iterator(id chunks.HeadChunkID, c chunkenc.Chunk, isoState *
 		}
 
 		ix -= len(s.mmappedChunks)
-		if s.headChunks != nil {
-			// Iterate all head chunks from the oldest to the newest.
-			headChunksLen := s.headChunks.len()
-			for j := headChunksLen - 1; j >= 0; j-- {
-				chk := s.headChunks.atOffset(j)
-				chkSamples := chk.chunk.NumSamples()
-				totalSamples += chkSamples
-				// Chunk ID is len(s.mmappedChunks) + $(headChunks list position).
-				// Where $(headChunks list position) is zero for the oldest chunk and $(s.headChunks.len() - 1)
-				// for the newest (open) chunk.
-				if headChunksLen-1-j < ix {
-					previousSamples += chkSamples
-				}
+		headChunksLen := s.headChunks.len()
+		// Iterate all head chunks from the newest to the oldest.
+		for chk, j := s.headChunks, 0; chk != nil; chk, j = chk.prev, j+1 {
+			chkSamples := chk.chunk.NumSamples()
+			totalSamples += chkSamples
+			// Chunk ID is len(s.mmappedChunks) + $(headChunks list position).
+			// Where $(headChunks list position) is zero for the oldest chunk and $(s.headChunks.len() - 1)
+			// for the newest (open) chunk.
+			if headChunksLen-1-j < ix {
+				previousSamples += chkSamples
 			}
 		}
 

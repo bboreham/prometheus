@@ -1493,8 +1493,14 @@ func (s *memSeries) mmapChunks(chunkDiskMapper *chunks.ChunkDiskMapper) (count i
 	// Write chunks starting from the oldest one and stop before we get to current s.headChunk.
 	// If we have this chain: s.headChunk{t4} -> t3 -> t2 -> t1 -> t0
 	// then we need to write chunks t0 to t3, but skip s.headChunks.
-	for i := s.headChunks.len() - 1; i > 0; i-- {
-		chk := s.headChunks.atOffset(i)
+	// Copy the linked list into a slice, so we can easily walk it backwards.
+	var chunkArray [256]*memChunk
+	revChunks := chunkArray[:0]
+	for chk := s.headChunks; chk != nil; chk = chk.prev {
+		revChunks = append(revChunks, chk)
+	}
+	for i := len(revChunks) - 1; i > 0; i-- {
+		chk := revChunks[i]
 		chunkRef := chunkDiskMapper.WriteChunk(s.ref, chk.minTime, chk.maxTime, chk.chunk, false, handleChunkWriteError)
 		s.mmappedChunks = append(s.mmappedChunks, &mmappedChunk{
 			ref:        chunkRef,
