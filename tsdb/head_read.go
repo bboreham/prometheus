@@ -366,11 +366,12 @@ func (h *headChunkReader) chunk(meta chunks.Meta, copyLastChunk bool) (chunkenc.
 // (and not the chunkenc.Chunk inside it) can be garbage collected after its usage.
 // if isOpen is true, it means that the returned *memChunk is used for appends.
 func (s *memSeries) chunk(id chunks.HeadChunkID, chunkDiskMapper *chunks.ChunkDiskMapper, memChunkPool *sync.Pool) (chunk *memChunk, headChunk, isOpen bool, err error) {
+	// If the chunk is memory-mapped,
 	// ix represents the index of chunk in the s.mmappedChunks slice. The chunk id's are
 	// incremented by 1 when new chunk is created, hence (id - firstChunkID) gives the slice index.
 	// The max index for the s.mmappedChunks slice can be len(s.mmappedChunks)-1, hence if the ix
 	// is >= len(s.mmappedChunks), it represents one of the chunks on s.headChunks linked list.
-	// The order of elemens is different for slice and linked list.
+	// The order of elements is different for slice and linked list.
 	// For s.mmappedChunks slice newer chunks are appended to it.
 	// For s.headChunks list newer chunks are prepended to it.
 	//
