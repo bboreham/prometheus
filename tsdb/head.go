@@ -2033,30 +2033,25 @@ func (s *memSeries) maxTime() int64 {
 // Chunk IDs remain unchanged.
 func (s *memSeries) truncateChunksBefore(mint int64, minOOOMmapRef chunks.ChunkDiskMapperRef) int {
 	var removedInOrder int
-	if s.headChunks != nil {
-		var i int
-		var nextChk *memChunk
-		chk := s.headChunks
-		for chk != nil {
-			if chk.maxTime < mint {
-				// If any head chunk is truncated, we can truncate all mmapped chunks.
-				removedInOrder = chk.len() + len(s.mmappedChunks)
-				s.firstChunkID += chunks.HeadChunkID(removedInOrder)
-				if i == 0 {
-					// This is the first chunk on the list so we need to remove the entire list.
-					s.headChunks = nil
-				} else {
-					// This is NOT the first chunk, unlink it from parent.
-					nextChk.prev = nil
-				}
-				s.mmappedChunks = nil
-				break
+	var nextChk *memChunk
+	for chk := s.headChunks; chk != nil; chk = chk.prev {
+		if chk.maxTime < mint {
+			// If any head chunk is truncated, we can truncate all mmapped chunks.
+			removedInOrder = chk.len() + len(s.mmappedChunks)
+			s.firstChunkID += chunks.HeadChunkID(removedInOrder)
+			if nextChk == nil {
+				// This is the first chunk on the list so we need to remove the entire list.
+				s.headChunks = nil
+			} else {
+				// This is NOT the first chunk, unlink it from parent.
+				nextChk.prev = nil
 			}
-			nextChk = chk
-			chk = chk.prev
-			i++
+			s.mmappedChunks = nil
+			break
 		}
+		nextChk = chk
 	}
+
 	if len(s.mmappedChunks) > 0 {
 		for i, c := range s.mmappedChunks {
 			if c.maxTime >= mint {
