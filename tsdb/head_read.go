@@ -380,12 +380,7 @@ func (s *memSeries) chunk(id chunks.HeadChunkID, chunkDiskMapper *chunks.ChunkDi
 	// }
 	ix := int(id) - int(s.firstChunkID)
 
-	var headChunksLen int
-	if s.headChunks != nil {
-		headChunksLen = s.headChunks.len()
-	}
-
-	if ix < 0 || ix > len(s.mmappedChunks)+headChunksLen-1 {
+	if ix < 0 {
 		return nil, false, false, storage.ErrNotFound
 	}
 
@@ -406,18 +401,13 @@ func (s *memSeries) chunk(id chunks.HeadChunkID, chunkDiskMapper *chunks.ChunkDi
 
 	ix -= len(s.mmappedChunks)
 
-	offset := headChunksLen - ix - 1
 	// headChunks is a linked list where first element is the most recent one and the last one is the oldest.
-	// This order is reversed when compared with mmappedChunks, since mmappedChunks[0] is the oldest chunk,
-	// while headChunk.atOffset(0) would give us the most recent chunk.
-	// So when calling headChunk.atOffset() we need to reverse the value of ix.
-	elem := s.headChunks.atOffset(offset)
+	// Chunk ID numbers increase as chunks get older, so we need the ix'th from the end.
+	elem := s.headChunks.atOffsetFromEnd(ix)
 	if elem == nil {
-		// This should never really happen and would mean that headChunksLen value is NOT equal
-		// to the length of the headChunks list.
 		return nil, false, false, storage.ErrNotFound
 	}
-	return elem, true, offset == 0, nil
+	return elem, true, elem == s.headChunks, nil
 }
 
 // oooMergedChunk returns the requested chunk based on the given chunks.Meta

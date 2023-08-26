@@ -2116,26 +2116,17 @@ func (mc *memChunk) oldest() (elem *memChunk) {
 	return elem
 }
 
-// atOffset returns a memChunk that's Nth element on the linked list.
-func (mc *memChunk) atOffset(offset int) (elem *memChunk) {
-	if offset == 0 {
-		return mc
+// atOffsetFromEnd returns the memChunk Nth from the end of the linked list.
+func (mc *memChunk) atOffsetFromEnd(offset int) (elem *memChunk) {
+	var chunkArray [256]*memChunk
+	chunks := chunkArray[:0]
+	for chk := mc; chk != nil; chk = chk.prev {
+		chunks = append(chunks, chk)
 	}
-	if offset < 0 {
-		return nil
+	if len(chunks) > offset {
+		return chunks[len(chunks)-1-offset]
 	}
-
-	var i int
-	elem = mc
-	for i < offset {
-		i++
-		elem = elem.prev
-		if elem == nil {
-			break
-		}
-	}
-
-	return elem
+	return nil
 }
 
 type oooHeadChunk struct {
