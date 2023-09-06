@@ -33,84 +33,82 @@ type yySymType struct {
 	duration time.Duration
 }
 
-const (
-	EQL                      = 57346
-	BLANK                    = 57347
-	COLON                    = 57348
-	COMMA                    = 57349
-	COMMENT                  = 57350
-	DURATION                 = 57351
-	EOF                      = 57352
-	ERROR                    = 57353
-	IDENTIFIER               = 57354
-	LEFT_BRACE               = 57355
-	LEFT_BRACKET             = 57356
-	LEFT_PAREN               = 57357
-	METRIC_IDENTIFIER        = 57358
-	NUMBER                   = 57359
-	RIGHT_BRACE              = 57360
-	RIGHT_BRACKET            = 57361
-	RIGHT_PAREN              = 57362
-	SEMICOLON                = 57363
-	SPACE                    = 57364
-	STRING                   = 57365
-	TIMES                    = 57366
-	operatorsStart           = 57367
-	ADD                      = 57368
-	DIV                      = 57369
-	EQLC                     = 57370
-	EQL_REGEX                = 57371
-	GTE                      = 57372
-	GTR                      = 57373
-	LAND                     = 57374
-	LOR                      = 57375
-	LSS                      = 57376
-	LTE                      = 57377
-	LUNLESS                  = 57378
-	MOD                      = 57379
-	MUL                      = 57380
-	NEQ                      = 57381
-	NEQ_REGEX                = 57382
-	POW                      = 57383
-	SUB                      = 57384
-	AT                       = 57385
-	ATAN2                    = 57386
-	operatorsEnd             = 57387
-	aggregatorsStart         = 57388
-	AVG                      = 57389
-	BOTTOMK                  = 57390
-	COUNT                    = 57391
-	COUNT_VALUES             = 57392
-	GROUP                    = 57393
-	MAX                      = 57394
-	MIN                      = 57395
-	QUANTILE                 = 57396
-	STDDEV                   = 57397
-	STDVAR                   = 57398
-	SUM                      = 57399
-	TOPK                     = 57400
-	aggregatorsEnd           = 57401
-	keywordsStart            = 57402
-	BOOL                     = 57403
-	BY                       = 57404
-	GROUP_LEFT               = 57405
-	GROUP_RIGHT              = 57406
-	IGNORING                 = 57407
-	OFFSET                   = 57408
-	ON                       = 57409
-	WITHOUT                  = 57410
-	keywordsEnd              = 57411
-	preprocessorStart        = 57412
-	START                    = 57413
-	END                      = 57414
-	preprocessorEnd          = 57415
-	startSymbolsStart        = 57416
-	START_METRIC             = 57417
-	START_SERIES_DESCRIPTION = 57418
-	START_EXPRESSION         = 57419
-	START_METRIC_SELECTOR    = 57420
-	startSymbolsEnd          = 57421
-)
+const EQL = 57346
+const BLANK = 57347
+const COLON = 57348
+const COMMA = 57349
+const COMMENT = 57350
+const DURATION = 57351
+const EOF = 57352
+const ERROR = 57353
+const IDENTIFIER = 57354
+const LEFT_BRACE = 57355
+const LEFT_BRACKET = 57356
+const LEFT_PAREN = 57357
+const METRIC_IDENTIFIER = 57358
+const NUMBER = 57359
+const RIGHT_BRACE = 57360
+const RIGHT_BRACKET = 57361
+const RIGHT_PAREN = 57362
+const SEMICOLON = 57363
+const SPACE = 57364
+const STRING = 57365
+const TIMES = 57366
+const operatorsStart = 57367
+const ADD = 57368
+const DIV = 57369
+const EQLC = 57370
+const EQL_REGEX = 57371
+const GTE = 57372
+const GTR = 57373
+const LAND = 57374
+const LOR = 57375
+const LSS = 57376
+const LTE = 57377
+const LUNLESS = 57378
+const MOD = 57379
+const MUL = 57380
+const NEQ = 57381
+const NEQ_REGEX = 57382
+const POW = 57383
+const SUB = 57384
+const AT = 57385
+const ATAN2 = 57386
+const operatorsEnd = 57387
+const aggregatorsStart = 57388
+const AVG = 57389
+const BOTTOMK = 57390
+const COUNT = 57391
+const COUNT_VALUES = 57392
+const GROUP = 57393
+const MAX = 57394
+const MIN = 57395
+const QUANTILE = 57396
+const STDDEV = 57397
+const STDVAR = 57398
+const SUM = 57399
+const TOPK = 57400
+const aggregatorsEnd = 57401
+const keywordsStart = 57402
+const BOOL = 57403
+const BY = 57404
+const GROUP_LEFT = 57405
+const GROUP_RIGHT = 57406
+const IGNORING = 57407
+const OFFSET = 57408
+const ON = 57409
+const WITHOUT = 57410
+const keywordsEnd = 57411
+const preprocessorStart = 57412
+const START = 57413
+const END = 57414
+const preprocessorEnd = 57415
+const startSymbolsStart = 57416
+const START_METRIC = 57417
+const START_SERIES_DESCRIPTION = 57418
+const START_EXPRESSION = 57419
+const START_METRIC_SELECTOR = 57420
+const startSymbolsEnd = 57421
 
 var yyToknames = [...]string{
 	"$end",
@@ -196,16 +194,14 @@ var yyToknames = [...]string{
 
 var yyStatenames = [...]string{}
 
-const (
-	yyEofCode          = 1
-	yyErrCode          = 2
-	yyInitialStackSize = 16
-)
+const yyEofCode = 1
+const yyErrCode = 2
+const yyInitialStackSize = 16
 
 //line promql/parser/generated_parser.y:749
 
 //line yacctab:1
-var yyExca = [...]int{
+var yyExca = [...]int16{
 	-1, 1,
 	1, -1,
 	-2, 0,
@@ -356,7 +352,7 @@ const yyPrivate = 57344
 
 const yyLast = 659
 
-var yyAct = [...]int{
+var yyAct = [...]int16{
 	268, 37, 216, 142, 258, 257, 150, 113, 77, 102,
 	101, 104, 188, 271, 189, 190, 191, 105, 6, 126,
 	218, 57, 253, 149, 154, 252, 251, 266, 180, 121,
@@ -425,7 +421,7 @@ var yyAct = [...]int{
 	0, 0, 0, 0, 0, 0, 0, 0, 98,
 }
 
-var yyPact = [...]int{
+var yyPact = [...]int16{
 	16, 78, 441, 441, 306, 394, -1000, -1000, -1000, 50,
 	-1000, -1000, -1000, -1000, -1000, -1000, -1000, -1000, -1000, -1000,
 	-1000, -1000, -1000, -1000, -1000, -1000, -1000, -1000, -1000, -1000,
@@ -456,7 +452,7 @@ var yyPact = [...]int{
 	-1000, 19, -1000, -1000, -1000, -1000, -1000,
 }
 
-var yyPgo = [...]int{
+var yyPgo = [...]int16{
 	0, 267, 7, 265, 2, 264, 262, 164, 261, 257,
 	115, 181, 253, 8, 252, 4, 5, 251, 250, 0,
 	23, 248, 6, 247, 246, 245, 10, 64, 244, 239,
@@ -464,7 +460,7 @@ var yyPgo = [...]int{
 	198, 196, 189, 188, 206, 3, 180, 165, 127,
 }
 
-var yyR1 = [...]int{
+var yyR1 = [...]int8{
 	0, 47, 47, 47, 47, 47, 47, 47, 30, 30,
 	30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
 	25, 25, 25, 25, 26, 26, 28, 28, 28, 28,
@@ -488,7 +484,7 @@ var yyR1 = [...]int{
 	16,
 }
 
-var yyR2 = [...]int{
+var yyR2 = [...]int8{
 	0, 2, 2, 2, 2, 2, 2, 1, 1, 1,
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 	3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
@@ -512,7 +508,7 @@ var yyR2 = [...]int{
 	1,
 }
 
-var yyChk = [...]int{
+var yyChk = [...]int16{
 	-1000, -47, 75, 76, 77, 78, 2, 10, -11, -7,
 	-10, 47, 48, 62, 49, 50, 51, 12, 32, 33,
 	36, 52, 16, 53, 66, 54, 55, 56, 57, 58,
@@ -543,7 +539,7 @@ var yyChk = [...]int{
 	-19, 24, 19, 2, 20, -4, -19,
 }
 
-var yyDef = [...]int{
+var yyDef = [...]int16{
 	0, -2, 122, 122, 0, 0, 7, 6, 1, 122,
 	96, 97, 98, 99, 100, 101, 102, 103, 104, 105,
 	106, 107, 108, 109, 110, 111, 112, 113, 114, 115,
@@ -574,11 +570,11 @@ var yyDef = [...]int{
 	138, 0, 76, 77, 52, 55, 139,
 }
 
-var yyTok1 = [...]int{
+var yyTok1 = [...]int8{
 	1,
 }
 
-var yyTok2 = [...]int{
+var yyTok2 = [...]int8{
 	2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
 	12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
 	22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
@@ -589,7 +585,7 @@ var yyTok2 = [...]int{
 	72, 73, 74, 75, 76, 77, 78, 79,
 }
 
-var yyTok3 = [...]int{
+var yyTok3 = [...]int8{
 	0,
 }
 
@@ -671,9 +667,9 @@ func yyErrorMessage(state, lookAhead int) string {
 	expected := make([]int, 0, 4)
 
 	// Look for shiftable tokens.
-	base := yyPact[state]
+	base := int(yyPact[state])
 	for tok := TOKSTART; tok-1 < len(yyToknames); tok++ {
-		if n := base + tok; n >= 0 && n < yyLast && yyChk[yyAct[n]] == tok {
+		if n := base + tok; n >= 0 && n < yyLast && int(yyChk[int(yyAct[n])]) == tok {
 			if len(expected) == cap(expected) {
 				return res
 			}
@@ -683,13 +679,13 @@ func yyErrorMessage(state, lookAhead int) string {
 
 	if yyDef[state] == -2 {
 		i := 0
-		for yyExca[i] != -1 || yyExca[i+1] != state {
+		for yyExca[i] != -1 || int(yyExca[i+1]) != state {
 			i += 2
 		}
 
 		// Look for tokens that we accept or reduce.
 		for i += 2; yyExca[i] >= 0; i += 2 {
-			tok := yyExca[i]
+			tok := int(yyExca[i])
 			if tok < TOKSTART || yyExca[i+1] == 0 {
 				continue
 			}
@@ -720,30 +716,30 @@ func yylex1(lex yyLexer, lval *yySymType) (char, token int) {
 	token = 0
 	char = lex.Lex(lval)
 	if char <= 0 {
-		token = yyTok1[0]
+		token = int(yyTok1[0])
 		goto out
 	}
 	if char < len(yyTok1) {
-		token = yyTok1[char]
+		token = int(yyTok1[char])
 		goto out
 	}
 	if char >= yyPrivate {
 		if char < yyPrivate+len(yyTok2) {
-			token = yyTok2[char-yyPrivate]
+			token = int(yyTok2[char-yyPrivate])
 			goto out
 		}
 	}
 	for i := 0; i < len(yyTok3); i += 2 {
-		token = yyTok3[i+0]
+		token = int(yyTok3[i+0])
 		if token == char {
-			token = yyTok3[i+1]
+			token = int(yyTok3[i+1])
 			goto out
 		}
 	}
 
 out:
 	if token == 0 {
-		token = yyTok2[1] /* unknown char */
+		token = int(yyTok2[1]) /* unknown char */
 	}
 	if yyDebug >= 3 {
 		__yyfmt__.Printf("lex %s(%d)\n", yyTokname(token), uint(char))
@@ -798,7 +794,7 @@ yystack:
 	yyS[yyp].yys = yystate
 
 yynewstate:
-	yyn = yyPact[yystate]
+	yyn = int(yyPact[yystate])
 	if yyn <= yyFlag {
 		goto yydefault /* simple state */
 	}
@@ -809,8 +805,8 @@ yynewstate:
 	if yyn < 0 || yyn >= yyLast {
 		goto yydefault
 	}
-	yyn = yyAct[yyn]
-	if yyChk[yyn] == yytoken { /* valid shift */
+	yyn = int(yyAct[yyn])
+	if int(yyChk[yyn]) == yytoken { /* valid shift */
 		yyrcvr.char = -1
 		yytoken = -1
 		yyVAL = yyrcvr.lval
@@ -823,7 +819,7 @@ yynewstate:
 
 yydefault:
 	/* default state action */
-	yyn = yyDef[yystate]
+	yyn = int(yyDef[yystate])
 	if yyn == -2 {
 		if yyrcvr.char < 0 {
 			yyrcvr.char, yytoken = yylex1(yylex, &yyrcvr.lval)
@@ -832,18 +828,18 @@ yydefault:
 		/* look through exception table */
 		xi := 0
 		for {
-			if yyExca[xi+0] == -1 && yyExca[xi+1] == yystate {
+			if yyExca[xi+0] == -1 && int(yyExca[xi+1]) == yystate {
 				break
 			}
 			xi += 2
 		}
 		for xi += 2; ; xi += 2 {
-			yyn = yyExca[xi+0]
+			yyn = int(yyExca[xi+0])
 			if yyn < 0 || yyn == yytoken {
 				break
 			}
 		}
-		yyn = yyExca[xi+1]
+		yyn = int(yyExca[xi+1])
 		if yyn < 0 {
 			goto ret0
 		}
@@ -865,10 +861,10 @@ yydefault:
 
 			/* find a state where "error" is a legal shift action */
 			for yyp >= 0 {
-				yyn = yyPact[yyS[yyp].yys] + yyErrCode
+				yyn = int(yyPact[yyS[yyp].yys]) + yyErrCode
 				if yyn >= 0 && yyn < yyLast {
-					yystate = yyAct[yyn] /* simulate a shift of "error" */
-					if yyChk[yystate] == yyErrCode {
+					yystate = int(yyAct[yyn]) /* simulate a shift of "error" */
+					if int(yyChk[yystate]) == yyErrCode {
 						goto yystack
 					}
 				}
@@ -904,7 +900,7 @@ yydefault:
 	yypt := yyp
 	_ = yypt // guard against "declared and not used"
 
-	yyp -= yyR2[yyn]
+	yyp -= int(yyR2[yyn])
 	// yyp is now the index of $0. Perform the default action. Iff the
 	// reduced production is ε, $1 is possibly out of range.
 	if yyp+1 >= len(yyS) {
@@ -915,16 +911,16 @@ yydefault:
 	yyVAL = yyS[yyp+1]
 
 	/* consult goto table to find next state */
-	yyn = yyR1[yyn]
-	yyg := yyPgo[yyn]
+	yyn = int(yyR1[yyn])
+	yyg := int(yyPgo[yyn])
 	yyj := yyg + yyS[yyp].yys + 1
 
 	if yyj >= yyLast {
-		yystate = yyAct[yyg]
+		yystate = int(yyAct[yyg])
 	} else {
-		yystate = yyAct[yyj]
-		if yyChk[yystate] != -yyn {
-			yystate = yyAct[yyg]
+		yystate = int(yyAct[yyj])
+		if int(yyChk[yystate]) != -yyn {
+			yystate = int(yyAct[yyg])
 		}
 	}
 	// dummy call; replaced with literal code
