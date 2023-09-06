@@ -26,6 +26,7 @@ import (
 
 	"github.com/prometheus/common/model"
 
+	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/util/strutil"
@@ -226,8 +227,9 @@ func (v SequenceValue) String() string {
 }
 
 type seriesDescription struct {
-	labels labels.Labels
-	values []SequenceValue
+	labels    labels.Labels
+	values    []SequenceValue
+	exemplars []exemplar.Exemplar
 }
 
 // ParseSeriesDesc parses the description of a time series.
@@ -252,6 +254,30 @@ func ParseSeriesDesc(input string) (labels labels.Labels, values []SequenceValue
 	}
 
 	return labels, values, err
+}
+
+// ParseSeriesDesc parses the description of a time series.
+func ParseExemplarsDesc(input string) (labels labels.Labels, exemplars []exemplar.Exemplar, err error) {
+	p := NewParser(input)
+	p.lex.seriesDesc = true
+
+	defer p.Close()
+	defer p.recover(&err)
+
+	parseResult := p.parseGenerated(START_EXEMPLARS_DESCRIPTION)
+	if parseResult != nil {
+		result := parseResult.(*seriesDescription)
+
+		labels = result.labels
+		exemplars = result.exemplars
+
+	}
+
+	if len(p.parseErrors) != 0 {
+		err = p.parseErrors
+	}
+
+	return labels, exemplars, err
 }
 
 // addParseErrf formats the error and appends it to the list of parsing errors.

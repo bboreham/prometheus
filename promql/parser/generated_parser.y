@@ -19,6 +19,7 @@ import (
         "strconv"
         "time"
 
+	"github.com/prometheus/prometheus/model/exemplar"
         "github.com/prometheus/prometheus/model/labels"
         "github.com/prometheus/prometheus/model/value"
 )
@@ -133,6 +134,7 @@ START_METRIC
 START_SERIES_DESCRIPTION
 START_EXPRESSION
 START_METRIC_SELECTOR
+START_EXEMPLARS_DESCRIPTION
 %token	startSymbolsEnd
 
 
@@ -179,6 +181,7 @@ start           :
                         { yylex.(*parser).generatedParserResult = $2 }
                 | START_METRIC_SELECTOR vector_selector
                         { yylex.(*parser).generatedParserResult = $2 }
+                | START_EXEMPLARS_DESCRIPTION exemplars_description
                 | start EOF
                 | error /* If none of the more detailed error messages are triggered, we fall back to this. */
                         { yylex.(*parser).unexpected("","") }
@@ -667,6 +670,14 @@ series_value    : IDENTIFIER
                 ;
 
 
+exemplars_description: metric metric series_value
+                        {
+                        yylex.(*parser).generatedParserResult = &seriesDescription{
+                                labels:    $1,
+                                exemplars: []exemplar.Exemplar{{Labels: $2, Value: $3}},
+                        }
+                        }
+                ;
 
 
 /*

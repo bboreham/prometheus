@@ -176,7 +176,7 @@ func parseLoadExemplars(lines []string, i int) (int, *loadExemplarsCmd, error) {
 			i--
 			break
 		}
-		metric, vals, err := parser.ParseSeriesDesc(defLine)
+		metric, vals, err := parser.ParseExemplarsDesc(defLine)
 		if err != nil {
 			var perr *parser.ParseErr
 			if errors.As(err, &perr) {
@@ -388,26 +388,10 @@ func (cmd loadExemplarsCmd) String() string {
 }
 
 // set a sequence of exemplars for the given metric.
-func (cmd *loadExemplarsCmd) set(m labels.Labels, vals ...parser.SequenceValue) {
+func (cmd *loadExemplarsCmd) set(m labels.Labels, exemplars ...exemplar.Exemplar) {
 	h := m.Hash()
 
-	ts := testStartTime
-	if _, ok := cmd.exemplars[h]; !ok {
-		cmd.exemplars[h] = make([]exemplar.Exemplar, 0)
-	}
-
-	samples := make([]exemplar.Exemplar, 0, len(vals))
-	for _, v := range vals {
-		if !v.Omitted {
-			samples = append(samples, exemplar.Exemplar{
-				Ts:    ts.UnixNano() / int64(time.Millisecond/time.Nanosecond),
-				HasTs: true,
-				Value: v.Value,
-			})
-		}
-		ts = ts.Add(cmd.gap)
-	}
-	cmd.exemplars[h] = append(cmd.exemplars[h], samples...)
+	cmd.exemplars[h] = exemplars
 	cmd.metrics[h] = m
 }
 
