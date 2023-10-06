@@ -117,7 +117,7 @@ func NewManager(o *Options, logger log.Logger, app storage.Appendable) *Manager 
 		scrapePools:   make(map[string]*scrapePool),
 		graceShut:     make(chan struct{}),
 		triggerReload: make(chan struct{}, 1),
-		buffers:       pool.New(1e3, 100e6, 3, func(sz int) interface{} { return make([]byte, 0, sz) }),
+		buffers:       pool.New(1e3, 100e6, 3),
 	}
 	targetMetadataCache.registerManager(m)
 
