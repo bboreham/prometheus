@@ -639,8 +639,12 @@ func NewBuilder(base Labels) *Builder {
 
 // Reset clears all current state for the builder.
 func (b *Builder) Reset(base Labels) {
-	if base.syms == nil {
-		base.syms = NewSymbolTable() // Don't do this in performance-sensitive code.
+	if base.syms == nil { // If base has a symbol table, use that.
+		if b.base.syms != nil {
+			base.syms = b.base.syms // Or continue using previous symbol table in builder.
+		} else {
+			base.syms = NewSymbolTable() // Don't do this in performance-sensitive code.
+		}
 	}
 	b.base = base
 	b.del = b.del[:0]
