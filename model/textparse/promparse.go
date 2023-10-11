@@ -155,10 +155,10 @@ type PromParser struct {
 }
 
 // NewPromParser returns a new parser of the byte slice.
-func NewPromParser(b []byte) Parser {
+func NewPromParser(b []byte, st *labels.SymbolTable) Parser {
 	return &PromParser{
 		l:       &promlexer{b: append(b, '\n')},
-		builder: labels.NewScratchBuilder(labels.NewSymbolTable(), 16),
+		builder: labels.NewScratchBuilder(st, 16),
 	}
 }
 

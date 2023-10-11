@@ -89,10 +89,10 @@ type OpenMetricsParser struct {
 }
 
 // NewOpenMetricsParser returns a new parser of the byte slice.
-func NewOpenMetricsParser(b []byte) Parser {
+func NewOpenMetricsParser(b []byte, st *labels.SymbolTable) Parser {
 	return &OpenMetricsParser{
 		l:       &openMetricsLexer{b: b},
-		builder: labels.NewScratchBuilder(labels.NewSymbolTable(), 16),
+		builder: labels.NewScratchBuilder(st, 16),
 	}
 }
 

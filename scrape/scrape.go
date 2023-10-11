@@ -929,6 +929,7 @@ type scrapeLoop struct {
 	scrapeClassicHistograms bool
 
 	appender            func(ctx context.Context) storage.Appender
+	symbolTable         *labels.SymbolTable
 	sampleMutator       labelsMutator
 	reportSampleMutator labelsMutator
 
@@ -1240,6 +1241,7 @@ func newScrapeLoop(ctx context.Context,
 		buffers:                 buffers,
 		cache:                   cache,
 		appender:                appender,
+		symbolTable:             labels.NewSymbolTable(), // TODO: clean this out from time to time.
 		sampleMutator:           sampleMutator,
 		reportSampleMutator:     reportSampleMutator,
 		stopped:                 make(chan struct{}),
@@ -1530,7 +1532,7 @@ type appendErrors struct {
 }
 
 func (sl *scrapeLoop) append(app storage.Appender, b []byte, contentType string, ts time.Time) (total, added, seriesAdded int, err error) {
-	p, err := textparse.New(b, contentType, sl.scrapeClassicHistograms)
+	p, err := textparse.New(b, contentType, sl.scrapeClassicHistograms, sl.symbolTable)
 	if err != nil {
 		level.Debug(sl.l).Log(
 			"msg", "Invalid content type on scrape, using prometheus parser as fallback.",

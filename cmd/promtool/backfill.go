@@ -99,6 +99,7 @@ func createBlocks(input []byte, mint, maxt, maxBlockDuration int64, maxSamplesIn
 	var (
 		wroteHeader  bool
 		nextSampleTs int64 = math.MaxInt64
+		symbolTable        = labels.NewSymbolTable()
 	)
 
 	for t := mint; t <= maxt; t += blockDuration {
@@ -127,7 +128,7 @@ func createBlocks(input []byte, mint, maxt, maxBlockDuration int64, maxSamplesIn
 
 			ctx := context.Background()
 			app := w.Appender(ctx)
-			p := textparse.NewOpenMetricsParser(input)
+			p := textparse.NewOpenMetricsParser(input, symbolTable)
 			samplesCount := 0
 			for {
 				e, err := p.Next()
@@ -216,7 +217,7 @@ func createBlocks(input []byte, mint, maxt, maxBlockDuration int64, maxSamplesIn
 }
 
 func backfill(maxSamplesInAppender int, input []byte, outputDir string, humanReadable, quiet bool, maxBlockDuration time.Duration) (err error) {
-	p := textparse.NewOpenMetricsParser(input)
+	p := textparse.NewOpenMetricsParser(input, labels.NewSymbolTable())
 	maxt, mint, err := getMinAndMaxTimestamps(p)
 	if err != nil {
 		return fmt.Errorf("getting min and max timestamp: %w", err)

@@ -16,6 +16,7 @@ package textparse
 import (
 	"testing"
 
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 )
 
@@ -91,7 +92,7 @@ func TestNewParser(t *testing.T) {
 			tt := tt // Copy to local variable before going parallel.
 			t.Parallel()
 
-			p, err := New([]byte{}, tt.contentType, false)
+			p, err := New([]byte{}, tt.contentType, false, labels.NewSymbolTable())
 			tt.validateParser(t, p)
 			if tt.err == "" {
 				require.NoError(t, err)
