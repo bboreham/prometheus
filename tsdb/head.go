@@ -2074,6 +2074,11 @@ func (s *memSeries) truncateChunksBefore(mint int64, minOOOMmapRef chunks.ChunkD
 			removedInOrder = i + 1
 		}
 		s.mmappedChunks = append(s.mmappedChunks[:0], s.mmappedChunks[removedInOrder:]...)
+		// Overwrite old chunk pointers with nil so they aren't kept alive.
+		tail := s.mmappedChunks[len(s.mmappedChunks) : len(s.mmappedChunks)+removedInOrder]
+		for i := range tail {
+			tail[i] = nil
+		}
 		s.firstChunkID += chunks.HeadChunkID(removedInOrder)
 	}
 
