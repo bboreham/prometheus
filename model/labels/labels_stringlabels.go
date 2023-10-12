@@ -67,6 +67,8 @@ func NewSymbolTable() *SymbolTable {
 }
 
 // ToNum maps a string to an integer, adding the string to the table if it is not already there.
+// Note: copies the string before adding, in case the caller passed part of
+// a buffer that should not be kept alive by this SymbolTable.
 func (t *SymbolTable) ToNum(name string) int {
 	t.mx.Lock()
 	defer t.mx.Unlock()
@@ -74,6 +76,7 @@ func (t *SymbolTable) ToNum(name string) int {
 		return i
 	}
 	i := len(t.byNum)
+	name = strings.Clone(name)
 	t.byNum = append(t.byNum, name)
 	t.byName[name] = i
 	return i
