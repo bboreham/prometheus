@@ -77,23 +77,15 @@ func extrapolatedRate(vals []parser.Value, args parser.Expressions, enh *EvalNod
 		resultHistogram    *histogram.FloatHistogram
 		firstT, lastT      int64
 		numSamplesMinusOne int
-		annos              = annotations.Annotations{}
+		annos              annotations.Annotations
 	)
 
 	// We need either at least two Histograms and no Floats, or at least two
 	// Floats and no Histograms to calculate a rate. Otherwise, drop this
 	// Vector element.
-	metricName := samples.Metric.Get(labels.MetricName)
 	if len(samples.Histograms) > 0 && len(samples.Floats) > 0 {
+		metricName := samples.Metric.Get(labels.MetricName)
 		return enh.Out, annos.Add(annotations.NewMixedFloatsHistogramsWarning(metricName, args[0].PositionRange()))
-	}
-
-	if isCounter && metricName != "" && len(samples.Floats) > 0 &&
-		!strings.HasSuffix(metricName, "_total") &&
-		!strings.HasSuffix(metricName, "_sum") &&
-		!strings.HasSuffix(metricName, "_count") &&
-		!strings.HasSuffix(metricName, "_bucket") {
-		annos.Add(annotations.NewPossibleNonCounterInfo(metricName, args[0].PositionRange()))
 	}
 
 	switch {
@@ -101,6 +93,7 @@ func extrapolatedRate(vals []parser.Value, args parser.Expressions, enh *EvalNod
 		numSamplesMinusOne = len(samples.Histograms) - 1
 		firstT = samples.Histograms[0].T
 		lastT = samples.Histograms[numSamplesMinusOne].T
+		metricName := samples.Metric.Get(labels.MetricName)
 		var newAnnos annotations.Annotations
 		resultHistogram, newAnnos = histogramRate(samples.Histograms, isCounter, metricName, args[0].PositionRange())
 		if resultHistogram == nil {
