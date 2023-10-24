@@ -47,23 +47,35 @@ type Label struct {
 // pairs encoded as indexes into the table in varint encoding.
 // Names are in alphabetical order.
 type Labels struct {
-	syms *SymbolTable
+	syms *nameTable
 	data string
 }
 
-// idea: split SymbolTable into the part used by Labels and the part used by Builder.  Only the latter needs the map.
+// Split SymbolTable into the part used by Labels and the part used by Builder.  Only the latter needs the map.
+
+// This part is used by Labels. All fields are immutable after construction.
+type nameTable struct {
+	byNum       []string     // This slice header is never changed, even while we are building the symbol table.
+	symbolTable *SymbolTable // If we need to use it in a Builder.
+}
 
 // SymbolTable is used to map strings into numbers so they can be packed together.
 type SymbolTable struct {
-	mx     sync.Mutex
-	byNum  []string
-	byName map[string]int
+	mx sync.Mutex
+	*nameTable
+	nextNum int
+	byName  map[string]int
 }
 
+const defaultSymbolTableSize = 1024
+
 func NewSymbolTable() *SymbolTable {
-	return &SymbolTable{
-		byName: make(map[string]int, 1024),
+	t := &SymbolTable{
+		nameTable: &nameTable{byNum: make([]string, defaultSymbolTableSize)},
+		byName:    make(map[string]int, defaultSymbolTableSize),
 	}
+	t.nameTable.symbolTable = t
+	return t
 }
 
 // ToNum maps a string to an integer, adding the string to the table if it is not already there.
@@ -75,17 +87,22 @@ func (t *SymbolTable) ToNum(name string) int {
 	if i, found := t.byName[name]; found {
 		return i
 	}
-	i := len(t.byNum)
+	i := t.nextNum
+	if t.nextNum == cap(t.byNum) {
+		// Name table is full; copy to a new one.  Don't touch the existing slice.
+		oldSlice := t.byNum
+		t.nameTable = &nameTable{byNum: make([]string, cap(oldSlice)*2), symbolTable: t}
+		copy(t.nameTable.byNum, oldSlice)
+	}
 	name = strings.Clone(name)
-	t.byNum = append(t.byNum, name)
+	t.byNum[i] = name
 	t.byName[name] = i
+	t.nextNum++
 	return i
 }
 
 // ToName maps an integer to a string.
-func (t *SymbolTable) ToName(num int) string {
-	t.mx.Lock()
-	defer t.mx.Unlock()
+func (t *nameTable) ToName(num int) string {
 	return t.byNum[num]
 }
 
@@ -110,7 +127,7 @@ func decodeVarint(data string, index int) (int, int) {
 	return size, index
 }
 
-func decodeString(t *SymbolTable, data string, index int) (string, int) {
+func decodeString(t *nameTable, data string, index int) (string, int) {
 	var num int
 	num, index = decodeVarint(data, index)
 	return t.ToName(num), index
@@ -406,7 +423,8 @@ func (ls Labels) WithoutEmpty() Labels {
 	if ls.IsEmpty() {
 		return ls
 	}
-	blank, ok := ls.syms.byName[""]
+	// Idea: have a constant symbol for blank, then we don't have to look it up.
+	blank, ok := ls.syms.symbolTable.byName[""]
 	if !ok { // Symbol table has no entry for blank - none of the values can be blank.
 		return ls
 	}
@@ -514,7 +532,7 @@ func New(ls ...Label) Labels {
 	size := labelsSize(syms, ls)
 	buf := make([]byte, size)
 	marshalLabelsToSizedBuffer(syms, ls, buf)
-	return Labels{syms: syms, data: yoloString(buf)}
+	return Labels{syms: syms.nameTable, data: yoloString(buf)}
 }
 
 // FromMap returns new sorted Labels from the given map.
@@ -625,6 +643,7 @@ func (ls Labels) ReleaseStrings(release func(string)) {
 
 // Builder allows modifying Labels.
 type Builder struct {
+	syms *SymbolTable
 	base Labels
 	del  []string
 	add  []Label
@@ -640,15 +659,21 @@ func NewBuilder(base Labels) *Builder {
 	return b
 }
 
+// NewBuilderWithSymbolTable returns a new LabelsBuilder not based on any labels, but with the SymbolTable.
+func NewBuilderWithSymbolTable(s *SymbolTable) *Builder {
+	return &Builder{
+		syms: s,
+	}
+}
+
 // Reset clears all current state for the builder.
 func (b *Builder) Reset(base Labels) {
-	if base.syms == nil { // If base has a symbol table, use that.
-		if b.base.syms != nil {
-			base.syms = b.base.syms // Or continue using previous symbol table in builder.
-		} else {
-			base.syms = NewSymbolTable() // Don't do this in performance-sensitive code.
-		}
+	if base.syms != nil { // If base has a symbol table, use that.
+		b.syms = base.syms.symbolTable
+	} else if b.syms == nil { // Or continue using previous symbol table in builder.
+		b.syms = NewSymbolTable() // Don't do this in performance-sensitive code.
 	}
+
 	b.base = base
 	b.del = b.del[:0]
 	b.add = b.add[:0]
@@ -752,7 +777,7 @@ func (b *Builder) Labels() Labels {
 	slices.Sort(b.del)
 	a, d := 0, 0
 
-	bufSize := len(b.base.data) + labelsSize(b.base.syms, b.add)
+	bufSize := len(b.base.data) + labelsSize(b.syms, b.add)
 	buf := make([]byte, 0, bufSize)
 	for pos := 0; pos < len(b.base.data); {
 		oldPos := pos
@@ -766,10 +791,10 @@ func (b *Builder) Labels() Labels {
 			continue // This label has been deleted.
 		}
 		for ; a < len(b.add) && b.add[a].Name < lName; a++ {
-			buf = appendLabelTo(b.base.syms, buf, &b.add[a]) // Insert label that was not in the base set.
+			buf = appendLabelTo(b.syms, buf, &b.add[a]) // Insert label that was not in the base set.
 		}
 		if a < len(b.add) && b.add[a].Name == lName {
-			buf = appendLabelTo(b.base.syms, buf, &b.add[a])
+			buf = appendLabelTo(b.syms, buf, &b.add[a])
 			a++
 			continue // This label has been replaced.
 		}
@@ -777,9 +802,9 @@ func (b *Builder) Labels() Labels {
 	}
 	// We have come to the end of the base set; add any remaining labels.
 	for ; a < len(b.add); a++ {
-		buf = appendLabelTo(b.base.syms, buf, &b.add[a])
+		buf = appendLabelTo(b.syms, buf, &b.add[a])
 	}
-	return Labels{syms: b.base.syms, data: yoloString(buf)}
+	return Labels{syms: b.syms.nameTable, data: yoloString(buf)}
 }
 
 func marshalLabelsToSizedBuffer(t *SymbolTable, lbls []Label, data []byte) int {
@@ -930,7 +955,7 @@ func (b *ScratchBuilder) Labels() Labels {
 		size := labelsSize(b.syms, b.add)
 		buf := make([]byte, size)
 		marshalLabelsToSizedBuffer(b.syms, b.add, buf)
-		b.output = Labels{syms: b.syms, data: yoloString(buf)}
+		b.output = Labels{syms: b.syms.nameTable, data: yoloString(buf)}
 	}
 	return b.output
 }
@@ -945,6 +970,6 @@ func (b *ScratchBuilder) Overwrite(ls *Labels) {
 		b.overwriteBuffer = make([]byte, size)
 	}
 	marshalLabelsToSizedBuffer(b.syms, b.add, b.overwriteBuffer)
-	ls.syms = b.syms
+	ls.syms = b.syms.nameTable
 	ls.data = yoloString(b.overwriteBuffer)
 }

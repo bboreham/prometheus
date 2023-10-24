@@ -513,9 +513,7 @@ func (sp *scrapePool) Sync(tgs []*targetgroup.Group) {
 	sp.targetMtx.Lock()
 	var all []*Target
 	var targets []*Target
-	// Small dance to get a Builder with the scrapePool's SymbolTable.
-	sb := labels.NewScratchBuilder(sp.symbolTable, 0)
-	lb := labels.NewBuilder(sb.Labels())
+	lb := labels.NewBuilderWithSymbolTable(sp.symbolTable)
 	sp.droppedTargets = []*Target{}
 	sp.droppedTargetsCount = 0
 	for _, tg := range tgs {
@@ -1860,9 +1858,7 @@ func (sl *scrapeLoop) report(app storage.Appender, start time.Time, duration tim
 	if scrapeErr == nil {
 		health = 1
 	}
-	// Small dance to get a Builder with the loop's SymbolTable.
-	sb := labels.NewScratchBuilder(sl.symbolTable, 0)
-	b := labels.NewBuilder(sb.Labels())
+	b := labels.NewBuilderWithSymbolTable(sl.symbolTable)
 
 	if err = sl.addReportSample(app, scrapeHealthMetricName, ts, health, b); err != nil {
 		return
