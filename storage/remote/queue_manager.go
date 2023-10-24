@@ -407,9 +407,8 @@ type QueueManager struct {
 	clientMtx   sync.RWMutex
 	storeClient WriteClient
 
-	seriesMtx     sync.Mutex // Covers seriesLabels and droppedSeries.
-	seriesLabels  map[chunks.HeadSeriesRef]labels.Labels
-	droppedSeries map[chunks.HeadSeriesRef]struct{}
+	seriesMtx    sync.Mutex // Covers seriesLabels.
+	seriesLabels map[chunks.HeadSeriesRef]labels.Labels
 
 	seriesSegmentMtx     sync.Mutex // Covers seriesSegmentIndexes - if you also lock seriesMtx, take seriesMtx first.
 	seriesSegmentIndexes map[chunks.HeadSeriesRef]int
@@ -475,7 +474,6 @@ func NewQueueManager(
 
 		seriesLabels:         make(map[chunks.HeadSeriesRef]labels.Labels),
 		seriesSegmentIndexes: make(map[chunks.HeadSeriesRef]int),
-		droppedSeries:        make(map[chunks.HeadSeriesRef]struct{}),
 
 		numShards:   cfg.MinShards,
 		reshardChan: make(chan int),
@@ -585,9 +583,6 @@ outer:
 		if !ok {
 			t.metrics.droppedSamplesTotal.Inc()
 			t.dataDropped.incr(1)
-			if _, ok := t.droppedSeries[s.Ref]; !ok {
-				level.Info(t.logger).Log("msg", "Dropped sample for series that was not explicitly dropped via relabelling", "ref", s.Ref)
-			}
 			t.seriesMtx.Unlock()
 			continue
 		}
@@ -638,9 +633,6 @@ outer:
 			t.metrics.droppedExemplarsTotal.Inc()
 			// Track dropped exemplars in the same EWMA for sharding calc.
 			t.dataDropped.incr(1)
-			if _, ok := t.droppedSeries[e.Ref]; !ok {
-				level.Info(t.logger).Log("msg", "Dropped exemplar for series that was not explicitly dropped via relabelling", "ref", e.Ref)
-			}
 			t.seriesMtx.Unlock()
 			continue
 		}
@@ -686,9 +678,6 @@ outer:
 		if !ok {
 			t.metrics.droppedHistogramsTotal.Inc()
 			t.dataDropped.incr(1)
-			if _, ok := t.droppedSeries[h.Ref]; !ok {
-				level.Info(t.logger).Log("msg", "Dropped histogram for series that was not explicitly dropped via relabelling", "ref", h.Ref)
-			}
 			t.seriesMtx.Unlock()
 			continue
 		}
@@ -733,9 +722,6 @@ outer:
 		if !ok {
 			t.metrics.droppedHistogramsTotal.Inc()
 			t.dataDropped.incr(1)
-			if _, ok := t.droppedSeries[h.Ref]; !ok {
-				level.Info(t.logger).Log("msg", "Dropped histogram for series that was not explicitly dropped via relabelling", "ref", h.Ref)
-			}
 			t.seriesMtx.Unlock()
 			continue
 		}
@@ -822,7 +808,6 @@ func (t *QueueManager) StoreSeries(series []record.RefSeries, index int) {
 		ls := processExternalLabels(t.symbolTable, s.Labels, t.externalLabels)
 		lbls, keep := relabel.Process(ls, t.relabelConfigs...)
 		if !keep || lbls.IsEmpty() {
-			t.droppedSeries[s.Ref] = struct{}{}
 			continue
 		}
 		t.seriesLabels[s.Ref] = lbls
