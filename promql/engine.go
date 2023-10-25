@@ -1080,6 +1080,9 @@ type EvalNodeHelper struct {
 	lblBuf       []byte
 	lblResultBuf []byte
 
+	aggregationResult map[uint64]*groupedAggregation
+	orderedAggResult  []*groupedAggregation
+
 	// For binary vector matching.
 	rightSigs    map[string]Sample
 	matchedSigs  map[string]map[uint64]struct{}
@@ -2534,8 +2537,14 @@ func (ev *evaluator) aggregation(e *parser.AggregateExpr, grouping []string, par
 	op := e.Op
 	without := e.Without
 	annos := annotations.Annotations{}
-	result := map[uint64]*groupedAggregation{}
-	orderedResult := []*groupedAggregation{}
+	if enh.aggregationResult != nil {
+		for k := range enh.aggregationResult { // Clear out previous results.
+			delete(enh.aggregationResult, k)
+		}
+	} else {
+		enh.aggregationResult = map[uint64]*groupedAggregation{}
+	}
+	enh.orderedAggResult = enh.orderedAggResult[:0]
 	var k int64
 	if op == parser.TOPK || op == parser.BOTTOMK {
 		f := param.(float64)
@@ -2590,7 +2599,7 @@ func (ev *evaluator) aggregation(e *parser.AggregateExpr, grouping []string, par
 			groupingKey, buf = generateGroupingKey(metric, grouping, without, buf)
 		}
 
-		group, ok := result[groupingKey]
+		group, ok := enh.aggregationResult[groupingKey]
 		// Add a new group if it doesn't exist.
 		if !ok {
 			var m labels.Labels
@@ -2625,8 +2634,8 @@ func (ev *evaluator) aggregation(e *parser.AggregateExpr, grouping []string, par
 				newAgg.groupCount = 0
 			}
 
-			result[groupingKey] = newAgg
-			orderedResult = append(orderedResult, newAgg)
+			enh.aggregationResult[groupingKey] = newAgg
+			enh.orderedAggResult = append(enh.orderedAggResult, newAgg)
 
 			inputVecLen := int64(len(vec))
 			resultSize := k
@@ -2638,21 +2647,21 @@ func (ev *evaluator) aggregation(e *parser.AggregateExpr, grouping []string, par
 			}
 			switch op {
 			case parser.STDVAR, parser.STDDEV:
-				result[groupingKey].floatValue = 0
+				enh.aggregationResult[groupingKey].floatValue = 0
 			case parser.TOPK, parser.QUANTILE:
-				result[groupingKey].heap = make(vectorByValueHeap, 1, resultSize)
-				result[groupingKey].heap[0] = Sample{
+				enh.aggregationResult[groupingKey].heap = make(vectorByValueHeap, 1, resultSize)
+				enh.aggregationResult[groupingKey].heap[0] = Sample{
 					F:      s.F,
 					Metric: s.Metric,
 				}
 			case parser.BOTTOMK:
-				result[groupingKey].reverseHeap = make(vectorByReverseValueHeap, 1, resultSize)
-				result[groupingKey].reverseHeap[0] = Sample{
+				enh.aggregationResult[groupingKey].reverseHeap = make(vectorByReverseValueHeap, 1, resultSize)
+				enh.aggregationResult[groupingKey].reverseHeap[0] = Sample{
 					F:      s.F,
 					Metric: s.Metric,
 				}
 			case parser.GROUP:
-				result[groupingKey].floatValue = 1
+				enh.aggregationResult[groupingKey].floatValue = 1
 			}
 			continue
 		}
@@ -2792,7 +2801,7 @@ func (ev *evaluator) aggregation(e *parser.AggregateExpr, grouping []string, par
 	}
 
 	// Construct the result Vector from the aggregated groups.
-	for _, aggr := range orderedResult {
+	for _, aggr := range enh.orderedAggResult {
 		switch op {
 		case parser.AVG:
 			if aggr.hasFloat && aggr.hasHistogram {
