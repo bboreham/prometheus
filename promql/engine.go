@@ -1082,6 +1082,7 @@ type EvalNodeHelper struct {
 
 	aggregationResult map[uint64]*groupedAggregation
 	orderedAggResult  []*groupedAggregation
+	reuseAggregation  []*groupedAggregation
 
 	// For binary vector matching.
 	rightSigs    map[string]Sample
@@ -2544,6 +2545,7 @@ func (ev *evaluator) aggregation(e *parser.AggregateExpr, grouping []string, par
 	} else {
 		enh.aggregationResult = map[uint64]*groupedAggregation{}
 	}
+	enh.reuseAggregation = append(enh.reuseAggregation, enh.orderedAggResult...)
 	enh.orderedAggResult = enh.orderedAggResult[:0]
 	var k int64
 	if op == parser.TOPK || op == parser.BOTTOMK {
@@ -2615,12 +2617,17 @@ func (ev *evaluator) aggregation(e *parser.AggregateExpr, grouping []string, par
 			default:
 				m = labels.EmptyLabels()
 			}
-			newAgg := &groupedAggregation{
-				labels:     m,
-				floatValue: s.F,
-				floatMean:  s.F,
-				groupCount: 1,
+			var newAgg *groupedAggregation
+			if len(enh.reuseAggregation) > 0 {
+				newAgg = enh.reuseAggregation[len(enh.reuseAggregation)-1]
+				enh.reuseAggregation = enh.reuseAggregation[:len(enh.reuseAggregation)-1]
+			} else {
+				newAgg = &groupedAggregation{}
 			}
+			newAgg.labels = m
+			newAgg.floatValue = s.F
+			newAgg.floatMean = s.F
+			newAgg.groupCount = 1
 			switch {
 			case s.H == nil:
 				newAgg.hasFloat = true
