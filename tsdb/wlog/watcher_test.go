@@ -213,6 +213,7 @@ func TestTailSamples(t *testing.T) {
 			watcher := NewWatcher(wMetrics, nil, nil, "", wt, dir, true, true)
 			watcher.SetStartTime(now)
 
+			passToWriter := newPassToWriter()
 			// Set the Watcher's metrics so they're not nil pointers.
 			watcher.setMetrics()
 			for i := first; i <= last; i++ {
@@ -222,7 +223,7 @@ func TestTailSamples(t *testing.T) {
 
 				reader := NewLiveReader(nil, NewLiveReaderMetrics(nil), segment)
 				// Use tail true so we can ensure we got the right number of samples.
-				watcher.readSegment(reader, i, true)
+				passToWriter.readSegment(watcher, reader, i, true)
 			}
 
 			expectedSeries := seriesCount
@@ -533,7 +534,7 @@ func TestReadCheckpointMultipleSegments(t *testing.T) {
 			lastCheckpoint, _, err := LastCheckpoint(watcher.walDir)
 			require.NoError(t, err)
 
-			err = watcher.readCheckpoint(lastCheckpoint, (*Watcher).readSegment)
+			err = watcher.readCheckpoint(lastCheckpoint, newPassToWriter())
 			require.NoError(t, err)
 		})
 	}
