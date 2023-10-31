@@ -203,6 +203,20 @@ func TestBufferedSeriesIteratorMixedHistograms(t *testing.T) {
 	require.Equal(t, histograms[1].ToFloat(), fh)
 }
 
+func TestBufferedSeriesIteratorMixedAdd(t *testing.T) {
+	h := tsdbutil.GenerateTestHistogram(0)
+
+	r := newSampleRing(10, 2, chunkenc.ValNone)
+	r.addF(fSample{t: 1, f: 3.14})
+	r.addH(hSample{t: 2, h: h})
+
+	it := r.iterator()
+
+	require.Equal(t, chunkenc.ValFloat, it.Next())
+	require.Equal(t, chunkenc.ValHistogram, it.Next())
+	require.Equal(t, chunkenc.ValNone, it.Next())
+}
+
 func BenchmarkBufferedSeriesIterator(b *testing.B) {
 	// Simulate a 5 minute rate.
 	it := NewBufferIterator(newFakeSeriesIterator(int64(b.N), 30), 5*60)
