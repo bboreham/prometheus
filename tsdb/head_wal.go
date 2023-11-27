@@ -701,6 +701,7 @@ func (h *Head) loadWBL(r *wlog.Reader, multiRef map[chunks.HeadSeriesRef]chunks.
 	go func() {
 		defer close(decodedCh)
 		for r.Next() {
+			var err error
 			rec := r.Record()
 			switch dec.Type(rec) {
 			case record.Samples:
