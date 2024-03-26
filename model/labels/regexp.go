@@ -885,7 +885,7 @@ func optimizeEqualStringMatchers(input StringMatcher, threshold int) StringMatch
 		caseSensitiveSet bool
 		numValues        int
 		numPrefixes      int
-		minPrefixLength  int = math.MaxInt
+		minPrefixLength  = math.MaxInt
 	)
 
 	// Analyse the input StringMatcher to count the number of occurrences
