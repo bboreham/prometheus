@@ -110,7 +110,7 @@ func (oh *OOOHeadIndexReader) series(ref storage.SeriesRef, builder *labels.Scra
 			ref := chunks.ChunkRef(chunks.NewHeadChunkRef(s.ref, s.oooHeadChunkID(len(s.ooo.oooMmappedChunks))))
 			var xor chunkenc.Chunk
 			if len(c.chunk.samples) > 0 { // Empty samples happens in tests, at least.
-				xor, _ = c.chunk.ToXOR() // Ignoring error because it can't fail.
+				xor, _ = c.chunk.ToXORBetweenTimestamps(oh.mint, oh.maxt) // Ignoring error because it can't fail.
 			}
 			addChunk(c.minTime, c.maxTime, ref, xor)
 		}

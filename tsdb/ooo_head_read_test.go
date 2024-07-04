@@ -784,11 +784,11 @@ func testOOOHeadChunkReader_Chunk(t *testing.T, scenario sampleTypeScenario) {
 				{Ts: minutes(20), V: 1},
 				{Ts: minutes(25), V: 1},
 				{Ts: minutes(30), V: 1},
-				{Ts: minutes(35), V: 1},
+				{Ts: minutes(35), V: 1}, // This sample is outside the query interval but we don't break up mmapped chunks.
 				{Ts: minutes(42), V: 1},
 				// Chunk 2 Head
 				{Ts: minutes(32), V: 2},
-				{Ts: minutes(50), V: 2},
+				{Ts: minutes(50), V: 2}, // This sample is outside the query interval and not returned.
 			},
 			expChunkError: false,
 			// ts (in minutes)         0       10       20       30       40       50       60       70       80       90       100
@@ -796,7 +796,7 @@ func testOOOHeadChunkReader_Chunk(t *testing.T, scenario sampleTypeScenario) {
 			// Chunk 0                          [-----------------]
 			// Chunk 1                                   [--------------------]
 			// Chunk 2 Current Head                                  [--------------]
-			// Output Graphically               [-----------------------------------]
+			// Output Graphically               [-----------------------------]
 			expChunksSamples: []chunks.SampleSlice{
 				{
 					scenario.sampleFunc(minutes(10), 0),
@@ -807,7 +807,6 @@ func testOOOHeadChunkReader_Chunk(t *testing.T, scenario sampleTypeScenario) {
 					scenario.sampleFunc(minutes(32), 2),
 					scenario.sampleFunc(minutes(35), 1),
 					scenario.sampleFunc(minutes(42), 1),
-					scenario.sampleFunc(minutes(50), 2),
 				},
 			},
 		},
