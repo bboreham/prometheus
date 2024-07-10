@@ -344,12 +344,9 @@ func TestScrapePoolReload(t *testing.T) {
 
 	got, err := gatherLabels(reg, "prometheus_target_reload_length_seconds")
 	require.NoError(t, err)
-	testutil.RequireEqual(t, []labels.Labels{labels.FromStrings("interval", "3s")}, got["prometheus_target_reload_length_seconds"])
-	require.NoError(t, client_testutil.GatherAndCompare(reg, bytes.NewBufferString(`
-	# HELP prometheus_target_scrape_pool_reloads_total Total number of scrape pool reloads.
-	# TYPE prometheus_target_scrape_pool_reloads_total counter
-	prometheus_target_scrape_pool_reloads_total 1
-	`), "prometheus_target_scrape_pool_reloads_total"))
+	expectedName, expectedValue := "interval", "3s"
+	require.Equal(t, [][]*dto.LabelPair{{{Name: &expectedName, Value: &expectedValue}}}, got)
+	require.Equal(t, 1.0, client_testutil.ToFloat64(sp.metrics.targetScrapePoolReloads))
 }
 
 func TestScrapePoolReloadPreserveRelabeledIntervalTimeout(t *testing.T) {
@@ -390,30 +387,24 @@ func TestScrapePoolReloadPreserveRelabeledIntervalTimeout(t *testing.T) {
 	// Check that the reload metric is labeled with the pool interval, not the overridden interval.
 	got, err := gatherLabels(reg, "prometheus_target_reload_length_seconds")
 	require.NoError(t, err)
-	testutil.RequireEqual(t, []labels.Labels{labels.FromStrings("interval", "3s")}, got["prometheus_target_reload_length_seconds"])
+	expectedName, expectedValue := "interval", "3s"
+	require.Equal(t, [][]*dto.LabelPair{{{Name: &expectedName, Value: &expectedValue}}}, got)
 }
 
-// Gather metrics from the provided Gatherer with specified familynames,
-// and extract labels. Return for each family name, a map of name/value pairs.
-func gatherLabels(g prometheus.Gatherer, familyNames ...string) (map[string][]labels.Labels, error) {
+// Gather metrics from the provided Gatherer with specified familyName,
+// and return all sets of name/value pairs.
+func gatherLabels(g prometheus.Gatherer, familyName string) ([][]*dto.LabelPair, error) {
 	families, err := g.Gather()
 	if err != nil {
 		return nil, err
 	}
-	builder := labels.NewScratchBuilder(0)
-	ret := make(map[string][]labels.Labels)
+	ret := make([][]*dto.LabelPair, 0)
 	for _, f := range families {
-		for _, name := range familyNames {
-			if f.GetName() == name {
-				for _, m := range f.GetMetric() {
-					builder.Reset()
-					for _, l := range m.GetLabel() {
-						builder.Add(l.GetName(), l.GetValue())
-					}
-					ret[name] = append(ret[name], builder.Labels())
-				}
-				break
+		if f.GetName() == familyName {
+			for _, m := range f.GetMetric() {
+				ret = append(ret, m.GetLabel())
 			}
+			break
 		}
 	}
 	return ret, nil
