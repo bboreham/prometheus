@@ -42,9 +42,10 @@ func TestVarint(t *testing.T) {
 		n := encodeVarint(buf[:], len(buf), c.v)
 		require.Equal(t, len(c.expected), len(buf)-n)
 		require.Equal(t, c.expected, buf[n:])
-		got, m := decodeVarint(string(buf[:]), n)
+		ls := makeLabels(nil, buf[n:])
+		got, m := decodeVarint(ls, 0)
 		require.Equal(t, c.v, got)
-		require.Equal(t, len(buf), m)
+		require.Equal(t, len(buf)-n, m)
 	}
 	require.Panics(t, func() { encodeVarint(buf[:], len(buf), 1<<29) })
 }

@@ -20,16 +20,22 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"unsafe"
 
 	"github.com/cespare/xxhash/v2"
 )
 
-// Labels is implemented by a SymbolTable and string holding name/value
+type Labels struct {
+	i *internals
+}
+
+// Internally, Labels is implemented by a SymbolTable and block of data holding name/value
 // pairs encoded as indexes into the table in varint encoding.
 // Names are in alphabetical order.
-type Labels struct {
-	syms *nameTable
-	data string
+type internals struct {
+	syms   *nameTable
+	length uint16
+	data   [1]byte // Variable sized.
 }
 
 // Split SymbolTable into the part used by Labels and the part used by Builder.  Only the latter needs the map.
@@ -104,53 +110,65 @@ func (t *nameTable) ToName(num int) string {
 	return t.byNum[num]
 }
 
+func (ls Labels) dataSlice() []byte {
+	return unsafe.Slice((*byte)(unsafe.Pointer(&ls.i.data[0])), ls.length())
+}
+
+func (ls Labels) twoBytesAt(index int) *[2]byte {
+	addr := unsafe.Pointer(&ls.i.data[0])
+	return (*[2]byte)(unsafe.Pointer(uintptr(addr) + uintptr(index)))
+}
+
 // "Varint" in this file is non-standard: we encode small numbers (up to 32767) in 2 bytes,
 // because we expect most Prometheus to have more than 127 unique strings.
 // And we don't encode numbers larger than 4 bytes because we don't expect more than 536,870,912 unique strings.
-func decodeVarint(data string, index int) (int, int) {
-	b := int(data[index]) + int(data[index+1])<<8
+func decodeVarint(ls Labels, index int) (int, int) {
+	data := ls.twoBytesAt(index)
+	b := int(data[0]) + int(data[1])<<8
 	index += 2
 	if b < 0x8000 {
 		return b, index
 	}
-	return decodeVarintRest(b, data, index)
+	return decodeVarintRest(b, ls, index)
 }
 
-func decodeVarintRest(b int, data string, index int) (int, int) {
+func decodeVarintRest(b int, ls Labels, index int) (int, int) {
+	data := ls.twoBytesAt(index)
 	value := int(b & 0x7FFF)
-	b = int(data[index])
+	b = int(data[0])
 	index++
 	if b < 0x80 {
 		return value | (b << 15), index
 	}
 
 	value |= (b & 0x7f) << 15
-	b = int(data[index])
+	b = int(data[1])
 	index++
 	return value | (b << 22), index
 }
 
-func decodeString(t *nameTable, data string, index int) (string, int) {
+func decodeString(ls Labels, index int) (string, int) {
 	// Copy decodeVarint here, because the Go compiler says it's too big to inline.
-	num := int(data[index]) + int(data[index+1])<<8
+	data := ls.twoBytesAt(index)
+	num := int(data[0]) + int(data[1])<<8
 	index += 2
 	if num >= 0x8000 {
-		num, index = decodeVarintRest(num, data, index)
+		num, index = decodeVarintRest(num, ls, index)
 	}
-	return t.ToName(num), index
+	return ls.i.syms.ToName(num), index
 }
 
 // Bytes returns ls as a byte slice.
 // It uses non-printing characters and so should not be used for printing.
 func (ls Labels) Bytes(buf []byte) []byte {
 	b := bytes.NewBuffer(buf[:0])
-	for i := 0; i < len(ls.data); {
+	for i := 0; i < ls.length(); {
 		if i > 0 {
 			b.WriteByte(seps[0])
 		}
 		var name, value string
-		name, i = decodeString(ls.syms, ls.data, i)
-		value, i = decodeString(ls.syms, ls.data, i)
+		name, i = decodeString(ls, i)
+		value, i = decodeString(ls, i)
 		b.WriteString(name)
 		b.WriteByte(seps[0])
 		b.WriteString(value)
@@ -158,9 +176,16 @@ func (ls Labels) Bytes(buf []byte) []byte {
 	return b.Bytes()
 }
 
+func (ls Labels) length() int {
+	if ls.i == nil {
+		return 0
+	}
+	return int(ls.i.length)
+}
+
 // IsZero implements yaml.IsZeroer - if we don't have this then 'omitempty' fields are always omitted.
 func (ls Labels) IsZero() bool {
-	return len(ls.data) == 0
+	return ls.length() == 0
 }
 
 // MatchLabels returns a subset of Labels that matches/does not match with the provided label names based on the 'on' boolean.
@@ -182,16 +207,16 @@ func (ls Labels) MatchLabels(on bool, names ...string) Labels {
 func (ls Labels) Hash() uint64 {
 	// Use xxhash.Sum64(b) for fast path as it's faster.
 	b := make([]byte, 0, 1024)
-	for pos := 0; pos < len(ls.data); {
-		name, newPos := decodeString(ls.syms, ls.data, pos)
-		value, newPos := decodeString(ls.syms, ls.data, newPos)
+	for pos := 0; pos < ls.length(); {
+		name, newPos := decodeString(ls, pos)
+		value, newPos := decodeString(ls, newPos)
 		if len(b)+len(name)+len(value)+2 >= cap(b) {
 			// If labels entry is 1KB+, hash the rest of them via Write().
 			h := xxhash.New()
 			_, _ = h.Write(b)
-			for pos < len(ls.data) {
-				name, pos = decodeString(ls.syms, ls.data, pos)
-				value, pos = decodeString(ls.syms, ls.data, pos)
+			for pos < ls.length() {
+				name, pos = decodeString(ls, pos)
+				value, pos = decodeString(ls, pos)
 				_, _ = h.WriteString(name)
 				_, _ = h.Write(seps)
 				_, _ = h.WriteString(value)
@@ -214,10 +239,10 @@ func (ls Labels) Hash() uint64 {
 func (ls Labels) HashForLabels(b []byte, names ...string) (uint64, []byte) {
 	b = b[:0]
 	j := 0
-	for i := 0; i < len(ls.data); {
+	for i := 0; i < ls.length(); {
 		var name, value string
-		name, i = decodeString(ls.syms, ls.data, i)
-		value, i = decodeString(ls.syms, ls.data, i)
+		name, i = decodeString(ls, i)
+		value, i = decodeString(ls, i)
 		for j < len(names) && names[j] < name {
 			j++
 		}
@@ -241,10 +266,10 @@ func (ls Labels) HashForLabels(b []byte, names ...string) (uint64, []byte) {
 func (ls Labels) HashWithoutLabels(b []byte, names ...string) (uint64, []byte) {
 	b = b[:0]
 	j := 0
-	for i := 0; i < len(ls.data); {
+	for i := 0; i < ls.length(); {
 		var name, value string
-		name, i = decodeString(ls.syms, ls.data, i)
-		value, i = decodeString(ls.syms, ls.data, i)
+		name, i = decodeString(ls, i)
+		value, i = decodeString(ls, i)
 		for j < len(names) && names[j] < name {
 			j++
 		}
@@ -264,9 +289,9 @@ func (ls Labels) HashWithoutLabels(b []byte, names ...string) (uint64, []byte) {
 func (ls Labels) BytesWithLabels(buf []byte, names ...string) []byte {
 	b := bytes.NewBuffer(buf[:0])
 	j := 0
-	for pos := 0; pos < len(ls.data); {
-		lName, newPos := decodeString(ls.syms, ls.data, pos)
-		lValue, newPos := decodeString(ls.syms, ls.data, newPos)
+	for pos := 0; pos < ls.length(); {
+		lName, newPos := decodeString(ls, pos)
+		lValue, newPos := decodeString(ls, newPos)
 		for j < len(names) && names[j] < lName {
 			j++
 		}
@@ -291,9 +316,9 @@ func (ls Labels) BytesWithLabels(buf []byte, names ...string) []byte {
 func (ls Labels) BytesWithoutLabels(buf []byte, names ...string) []byte {
 	b := bytes.NewBuffer(buf[:0])
 	j := 0
-	for pos := 0; pos < len(ls.data); {
-		lName, newPos := decodeString(ls.syms, ls.data, pos)
-		lValue, newPos := decodeString(ls.syms, ls.data, newPos)
+	for pos := 0; pos < ls.length(); {
+		lName, newPos := decodeString(ls, pos)
+		lValue, newPos := decodeString(ls, newPos)
 		for j < len(names) && names[j] < lName {
 			j++
 		}
@@ -310,9 +335,22 @@ func (ls Labels) BytesWithoutLabels(buf []byte, names ...string) []byte {
 	return b.Bytes()
 }
 
+func makeLabels(syms *nameTable, data []byte) Labels {
+	block := make([]byte, len(data)+8+2)
+	i := (*internals)(unsafe.Pointer(unsafe.SliceData(block)))
+	i.syms = syms
+	i.length = uint16(len(data))
+	copy(block[10:], data)
+	return Labels{i: i}
+}
+
 // Copy returns a copy of the labels.
 func (ls Labels) Copy() Labels {
-	return Labels{syms: ls.syms, data: strings.Clone(ls.data)}
+	dst := make([]byte, ls.i.length+8+2)
+	src := unsafe.Slice((*byte)(unsafe.Pointer(ls.i)), ls.i.length+8+2)
+	copy(dst, src)
+	i := (*internals)(unsafe.Pointer(unsafe.SliceData(dst)))
+	return Labels{i: i}
 }
 
 // Get returns the value for the label with the given name.
@@ -321,20 +359,21 @@ func (ls Labels) Get(name string) string {
 	if name == "" { // Avoid crash in loop if someone asks for "".
 		return "" // Prometheus does not store blank label names.
 	}
-	for i := 0; i < len(ls.data); {
+	for i := 0; i < ls.length(); {
 		var lName, lValue string
-		lName, i = decodeString(ls.syms, ls.data, i)
+		lName, i = decodeString(ls, i)
 		if lName == name {
-			lValue, _ = decodeString(ls.syms, ls.data, i)
+			lValue, _ = decodeString(ls, i)
 			return lValue
 		} else if lName[0] > name[0] { // Stop looking if we've gone past.
 			break
 		}
 		// Copy decodeVarint here, because the Go compiler says it's too big to inline.
-		num := int(ls.data[i]) + int(ls.data[i+1])<<8
+		data := ls.twoBytesAt(i)
+		num := int(data[0]) + int(data[1])<<8
 		i += 2
 		if num >= 0x8000 {
-			_, i = decodeVarintRest(num, ls.data, i)
+			_, i = decodeVarintRest(num, ls, i)
 		}
 	}
 	return ""
@@ -345,19 +384,19 @@ func (ls Labels) Has(name string) bool {
 	if name == "" { // Avoid crash in loop if someone asks for "".
 		return false // Prometheus does not store blank label names.
 	}
-	for i := 0; i < len(ls.data); {
+	for i := 0; i < ls.length(); {
 		var lName string
-		lName, i = decodeString(ls.syms, ls.data, i)
+		lName, i = decodeString(ls, i)
 		if lName == name {
 			return true
 		} else if lName[0] > name[0] { // Stop looking if we've gone past.
 			break
 		}
 		// Copy decodeVarint here, because the Go compiler says it's too big to inline.
-		num := int(ls.data[i]) + int(ls.data[i+1])<<8
-		i += 2
+		data := ls.twoBytesAt(i)
+		num := int(data[0]) + int(data[1])<<8
 		if num >= 0x8000 {
-			_, i = decodeVarintRest(num, ls.data, i)
+			_, i = decodeVarintRest(num, ls, i)
 		}
 	}
 	return false
@@ -367,12 +406,12 @@ func (ls Labels) Has(name string) bool {
 // It assumes that the labelset is sorted.
 func (ls Labels) HasDuplicateLabelNames() (string, bool) {
 	prevNum := -1
-	for i := 0; i < len(ls.data); {
+	for i := 0; i < ls.length(); {
 		var lNum int
-		lNum, i = decodeVarint(ls.data, i)
-		_, i = decodeVarint(ls.data, i)
+		lNum, i = decodeVarint(ls, i)
+		_, i = decodeVarint(ls, i)
 		if lNum == prevNum {
-			return ls.syms.ToName(lNum), true
+			return ls.i.syms.ToName(lNum), true
 		}
 		prevNum = lNum
 	}
@@ -386,49 +425,55 @@ func (ls Labels) WithoutEmpty() Labels {
 		return ls
 	}
 	// Idea: have a constant symbol for blank, then we don't have to look it up.
-	blank, ok := ls.syms.symbolTable.checkNum("")
+	blank, ok := ls.i.syms.symbolTable.checkNum("")
 	if !ok { // Symbol table has no entry for blank - none of the values can be blank.
 		return ls
 	}
-	for pos := 0; pos < len(ls.data); {
-		_, newPos := decodeVarint(ls.data, pos)
-		lValue, newPos := decodeVarint(ls.data, newPos)
+	for pos := 0; pos < ls.length(); {
+		_, newPos := decodeVarint(ls, pos)
+		lValue, newPos := decodeVarint(ls, newPos)
 		if lValue != blank {
 			pos = newPos
 			continue
 		}
 		// Do not copy the slice until it's necessary.
-		// TODO: could optimise the case where all blanks are at the end.
+		// FIXME: currently doing two copies.
 		// Note: we size the new buffer on the assumption there is exactly one blank value.
-		buf := make([]byte, pos, pos+(len(ls.data)-newPos))
-		copy(buf, ls.data[:pos]) // copy the initial non-blank labels
-		pos = newPos             // move past the first blank value
-		for pos < len(ls.data) {
+		buf := make([]byte, pos, pos+(ls.length()-newPos))
+		copy(buf, ls.dataSlice()[:pos]) // copy the initial non-blank labels
+		pos = newPos                    // move past the first blank value
+		for pos < ls.length() {
 			var newPos int
-			_, newPos = decodeVarint(ls.data, pos)
-			lValue, newPos = decodeVarint(ls.data, newPos)
+			_, newPos = decodeVarint(ls, pos)
+			lValue, newPos = decodeVarint(ls, newPos)
 			if lValue != blank {
-				buf = append(buf, ls.data[pos:newPos]...)
+				buf = append(buf, ls.dataSlice()[pos:newPos]...)
 			}
 			pos = newPos
 		}
-		return Labels{syms: ls.syms, data: yoloString(buf)}
+		return makeLabels(ls.i.syms, buf)
 	}
 	return ls
 }
 
 // Equal returns whether the two label sets are equal.
 func Equal(a, b Labels) bool {
-	if a.syms == b.syms {
-		return a.data == b.data
+	la, lb := a.length(), b.length()
+	if la == 0 && lb == 0 {
+		return true
+	}
+	if la == 0 || lb == 0 {
+		return false
+	}
+	if a.i.syms == b.i.syms {
+		return bytes.Equal(a.dataSlice(), b.dataSlice())
 	}
 
-	la, lb := len(a.data), len(b.data)
 	ia, ib := 0, 0
 	for ia < la && ib < lb {
 		var aValue, bValue string
-		aValue, ia = decodeString(a.syms, a.data, ia)
-		bValue, ib = decodeString(b.syms, b.data, ib)
+		aValue, ia = decodeString(a, ia)
+		bValue, ib = decodeString(b, ib)
 		if aValue != bValue {
 			return false
 		}
@@ -454,7 +499,7 @@ func New(ls ...Label) Labels {
 	size, nums := mapLabelsToNumbers(syms, ls, stackSpace[:])
 	buf := make([]byte, size)
 	marshalNumbersToSizedBuffer(nums, buf)
-	return Labels{syms: syms.nameTable, data: yoloString(buf)}
+	return makeLabels(syms.nameTable, buf)
 }
 
 // FromStrings creates new labels from pairs of strings.
@@ -473,12 +518,12 @@ func FromStrings(ss ...string) Labels {
 // Compare compares the two label sets.
 // The result will be 0 if a==b, <0 if a < b, and >0 if a > b.
 func Compare(a, b Labels) int {
-	la, lb := len(a.data), len(b.data)
+	la, lb := a.length(), b.length()
 	ia, ib := 0, 0
 	for ia < la && ib < lb {
 		var aName, bName string
-		aName, ia = decodeString(a.syms, a.data, ia)
-		bName, ib = decodeString(b.syms, b.data, ib)
+		aName, ia = decodeString(a, ia)
+		bName, ib = decodeString(b, ib)
 		if aName != bName {
 			if aName < bName {
 				return -1
@@ -486,8 +531,8 @@ func Compare(a, b Labels) int {
 			return 1
 		}
 		var aValue, bValue string
-		aValue, ia = decodeString(a.syms, a.data, ia)
-		bValue, ib = decodeString(b.syms, b.data, ib)
+		aValue, ia = decodeString(a, ia)
+		bValue, ib = decodeString(b, ib)
 		if aValue != bValue {
 			if aValue < bValue {
 				return -1
@@ -506,15 +551,15 @@ func (ls *Labels) CopyFrom(b Labels) {
 
 // IsEmpty returns true if ls represents an empty set of labels.
 func (ls Labels) IsEmpty() bool {
-	return len(ls.data) == 0
+	return ls.length() == 0
 }
 
 // Len returns the number of labels; it is relatively slow.
 func (ls Labels) Len() int {
 	count := 0
-	for i := 0; i < len(ls.data); {
-		_, i = decodeVarint(ls.data, i)
-		_, i = decodeVarint(ls.data, i)
+	for i := 0; i < ls.length(); {
+		_, i = decodeVarint(ls, i)
+		_, i = decodeVarint(ls, i)
 		count++
 	}
 	return count
@@ -522,20 +567,20 @@ func (ls Labels) Len() int {
 
 // Range calls f on each label.
 func (ls Labels) Range(f func(l Label)) {
-	for i := 0; i < len(ls.data); {
+	for i := 0; i < ls.length(); {
 		var lName, lValue string
-		lName, i = decodeString(ls.syms, ls.data, i)
-		lValue, i = decodeString(ls.syms, ls.data, i)
+		lName, i = decodeString(ls, i)
+		lValue, i = decodeString(ls, i)
 		f(Label{Name: lName, Value: lValue})
 	}
 }
 
 // Validate calls f on each label. If f returns a non-nil error, then it returns that error cancelling the iteration.
 func (ls Labels) Validate(f func(l Label) error) error {
-	for i := 0; i < len(ls.data); {
+	for i := 0; i < ls.length(); {
 		var lName, lValue string
-		lName, i = decodeString(ls.syms, ls.data, i)
-		lValue, i = decodeString(ls.syms, ls.data, i)
+		lName, i = decodeString(ls, i)
+		lValue, i = decodeString(ls, i)
 		err := f(Label{Name: lName, Value: lValue})
 		if err != nil {
 			return err
@@ -556,22 +601,21 @@ func (ls Labels) ReleaseStrings(release func(string)) {
 
 // DropMetricName returns Labels with "__name__" removed.
 func (ls Labels) DropMetricName() Labels {
-	for i := 0; i < len(ls.data); {
-		lName, i2 := decodeString(ls.syms, ls.data, i)
-		_, i2 = decodeVarint(ls.data, i2)
+	buf := ls.dataSlice()
+	for i := 0; i < ls.length(); {
+		lName, i2 := decodeString(ls, i)
+		_, i2 = decodeVarint(ls, i2)
 		if lName == MetricName {
-			if i == 0 { // Make common case fast with no allocations.
-				ls.data = ls.data[i2:]
-			} else {
-				ls.data = ls.data[:i] + ls.data[i2:]
-			}
+			buf = make([]byte, 0) // FIXME calculate the right length
+			buf = append(buf, ls.dataSlice()[:i]...)
+			buf = append(buf, ls.dataSlice()[i2:]...)
 			break
 		} else if lName[0] > MetricName[0] { // Stop looking if we've gone past.
 			break
 		}
 		i = i2
 	}
-	return ls
+	return makeLabels(ls.i.syms, buf) // FIXME: don't want two copies.
 }
 
 // Builder allows modifying Labels.
@@ -592,8 +636,8 @@ func NewBuilderWithSymbolTable(s *SymbolTable) *Builder {
 
 // Reset clears all current state for the builder.
 func (b *Builder) Reset(base Labels) {
-	if base.syms != nil { // If base has a symbol table, use that.
-		b.syms = base.syms.symbolTable
+	if base.i != nil && base.i.syms != nil { // If base has a symbol table, use that.
+		b.syms = base.i.syms.symbolTable
 	} else if b.syms == nil { // Or continue using previous symbol table in builder.
 		b.syms = NewSymbolTable() // Don't do this in performance-sensitive code.
 	}
@@ -620,13 +664,13 @@ func (b *Builder) Labels() Labels {
 	a, d, newSize := 0, 0, 0
 
 	newSize, b.nums = mapLabelsToNumbers(b.syms, b.add, b.nums)
-	bufSize := len(b.base.data) + newSize
+	bufSize := b.base.length() + newSize
 	buf := make([]byte, 0, bufSize)
-	for pos := 0; pos < len(b.base.data); {
+	for pos := 0; pos < b.base.length(); {
 		oldPos := pos
 		var lName string
-		lName, pos = decodeString(b.base.syms, b.base.data, pos)
-		_, pos = decodeVarint(b.base.data, pos)
+		lName, pos = decodeString(b.base, pos)
+		_, pos = decodeVarint(b.base, pos)
 		for d < len(b.del) && b.del[d] < lName {
 			d++
 		}
@@ -641,13 +685,13 @@ func (b *Builder) Labels() Labels {
 			a++
 			continue // This label has been replaced.
 		}
-		buf = append(buf, b.base.data[oldPos:pos]...) // If base had a symbol-table we are using it, so we don't need to look up these symbols.
+		buf = append(buf, b.base.dataSlice()[oldPos:pos]...) // If base had a symbol-table we are using it, so we don't need to look up these symbols.
 	}
 	// We have come to the end of the base set; add any remaining labels.
 	for ; a < len(b.add); a++ {
 		buf = appendLabelTo(b.nums[a*2], b.nums[a*2+1], buf)
 	}
-	return Labels{syms: b.syms.nameTable, data: yoloString(buf)}
+	return makeLabels(b.syms.nameTable, buf)
 }
 
 func marshalNumbersToSizedBuffer(nums []int, data []byte) int {
@@ -796,7 +840,7 @@ func (b *ScratchBuilder) Labels() Labels {
 		size, b.nums = mapLabelsToNumbers(b.syms, b.add, b.nums)
 		buf := make([]byte, size)
 		marshalNumbersToSizedBuffer(b.nums, buf)
-		b.output = Labels{syms: b.syms.nameTable, data: yoloString(buf)}
+		b.output = makeLabels(b.syms.nameTable, buf)
 	}
 	return b.output
 }
@@ -812,6 +856,5 @@ func (b *ScratchBuilder) Overwrite(ls *Labels) {
 		b.overwriteBuffer = make([]byte, size)
 	}
 	marshalNumbersToSizedBuffer(b.nums, b.overwriteBuffer)
-	ls.syms = b.syms.nameTable
-	ls.data = yoloString(b.overwriteBuffer)
+	*ls = makeLabels(b.syms.nameTable, b.overwriteBuffer)
 }

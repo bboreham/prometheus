@@ -24,16 +24,16 @@ import (
 func StableHash(ls Labels) uint64 {
 	// Use xxhash.Sum64(b) for fast path as it's faster.
 	b := make([]byte, 0, 1024)
-	for pos := 0; pos < len(ls.data); {
-		name, newPos := decodeString(ls.syms, ls.data, pos)
-		value, newPos := decodeString(ls.syms, ls.data, newPos)
+	for pos := 0; pos < ls.length(); {
+		name, newPos := decodeString(ls, pos)
+		value, newPos := decodeString(ls, newPos)
 		if len(b)+len(name)+len(value)+2 >= cap(b) {
 			// If labels entry is 1KB+, hash the rest of them via Write().
 			h := xxhash.New()
 			_, _ = h.Write(b)
-			for pos < len(ls.data) {
-				name, pos = decodeString(ls.syms, ls.data, pos)
-				value, pos = decodeString(ls.syms, ls.data, pos)
+			for pos < ls.length() {
+				name, pos = decodeString(ls, pos)
+				value, pos = decodeString(ls, pos)
 				_, _ = h.WriteString(name)
 				_, _ = h.Write(seps)
 				_, _ = h.WriteString(value)
