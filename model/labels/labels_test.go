@@ -439,11 +439,15 @@ func TestLabels_Has(t *testing.T) {
 			input:    "aaa",
 			expected: true,
 		},
+		{
+			input:    "ccc", // ccc is a value not a name; should not return true.
+			expected: false,
+		},
 	}
 
 	labelsSet := FromStrings(
 		"aaa", "111",
-		"bbb", "222")
+		"bbb", "ccc")
 
 	for i, test := range tests {
 		got := labelsSet.Has(test.input)
