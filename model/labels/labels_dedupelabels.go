@@ -399,6 +399,7 @@ func (ls Labels) Has(name string) bool {
 		// Copy decodeVarint here, because the Go compiler says it's too big to inline.
 		data := ls.twoBytesAt(i)
 		num := int(data[0]) + int(data[1])<<8
+		i += 2
 		if num >= 0x8000 {
 			_, i = decodeVarintRest(num, ls, i)
 		}
