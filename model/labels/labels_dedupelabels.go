@@ -26,6 +26,7 @@ import (
 )
 
 type Labels struct {
+	s *nameTable
 	i *internals
 }
 
@@ -33,7 +34,6 @@ type Labels struct {
 // pairs encoded as indexes into the table in varint encoding.
 // Names are in alphabetical order.
 type internals struct {
-	syms   *nameTable
 	length uint16
 	data   [1]byte // Actually variable sized.
 }
@@ -111,7 +111,7 @@ func (t *nameTable) ToName(num int) string {
 }
 
 func (ls Labels) syms() *nameTable {
-	return ls.i.syms
+	return ls.s
 }
 
 func (ls Labels) dataSlice() []byte {
@@ -342,10 +342,9 @@ func (ls Labels) BytesWithoutLabels(buf []byte, names ...string) []byte {
 func makeLabels(syms *nameTable, data []byte) Labels {
 	block := make([]byte, len(data)+int(unsafe.Sizeof(internals{})))
 	i := (*internals)(unsafe.Pointer(unsafe.SliceData(block)))
-	i.syms = syms
 	i.length = uint16(len(data))
-	copy(block[10:], data)
-	return Labels{i: i}
+	copy(unsafe.Slice((*byte)(unsafe.Pointer(&i.data)), i.length), data)
+	return Labels{s: syms, i: i}
 }
 
 // Copy returns a copy of the labels.
@@ -354,7 +353,7 @@ func (ls Labels) Copy() Labels {
 	src := unsafe.Slice((*byte)(unsafe.Pointer(ls.i)), len(block))
 	copy(block, src)
 	i := (*internals)(unsafe.Pointer(unsafe.SliceData(block)))
-	return Labels{i: i}
+	return Labels{s: ls.s, i: i}
 }
 
 // Get returns the value for the label with the given name.
