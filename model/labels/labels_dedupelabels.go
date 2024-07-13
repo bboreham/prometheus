@@ -110,6 +110,10 @@ func (t *nameTable) ToName(num int) string {
 	return t.byNum[num]
 }
 
+func (ls Labels) syms() *nameTable {
+	return ls.i.syms
+}
+
 func (ls Labels) dataSlice() []byte {
 	return unsafe.Slice((*byte)(unsafe.Pointer(&ls.i.data[0])), ls.length())
 }
@@ -155,7 +159,7 @@ func decodeString(ls Labels, index int) (string, int) {
 	if num >= 0x8000 {
 		num, index = decodeVarintRest(num, ls, index)
 	}
-	return ls.i.syms.ToName(num), index
+	return ls.syms().ToName(num), index
 }
 
 // Bytes returns ls as a byte slice.
@@ -411,7 +415,7 @@ func (ls Labels) HasDuplicateLabelNames() (string, bool) {
 		lNum, i = decodeVarint(ls, i)
 		_, i = decodeVarint(ls, i)
 		if lNum == prevNum {
-			return ls.i.syms.ToName(lNum), true
+			return ls.syms().ToName(lNum), true
 		}
 		prevNum = lNum
 	}
@@ -425,7 +429,7 @@ func (ls Labels) WithoutEmpty() Labels {
 		return ls
 	}
 	// Idea: have a constant symbol for blank, then we don't have to look it up.
-	blank, ok := ls.i.syms.symbolTable.checkNum("")
+	blank, ok := ls.syms().symbolTable.checkNum("")
 	if !ok { // Symbol table has no entry for blank - none of the values can be blank.
 		return ls
 	}
@@ -451,7 +455,7 @@ func (ls Labels) WithoutEmpty() Labels {
 			}
 			pos = newPos
 		}
-		return makeLabels(ls.i.syms, buf)
+		return makeLabels(ls.syms(), buf)
 	}
 	return ls
 }
@@ -465,7 +469,7 @@ func Equal(a, b Labels) bool {
 	if la == 0 || lb == 0 {
 		return false
 	}
-	if a.i.syms == b.i.syms {
+	if a.syms() == b.syms() {
 		return bytes.Equal(a.dataSlice(), b.dataSlice())
 	}
 
@@ -615,7 +619,7 @@ func (ls Labels) DropMetricName() Labels {
 		}
 		i = i2
 	}
-	return makeLabels(ls.i.syms, buf) // FIXME: don't want two copies.
+	return makeLabels(ls.syms(), buf) // FIXME: don't want two copies.
 }
 
 // Builder allows modifying Labels.
@@ -636,8 +640,8 @@ func NewBuilderWithSymbolTable(s *SymbolTable) *Builder {
 
 // Reset clears all current state for the builder.
 func (b *Builder) Reset(base Labels) {
-	if base.i != nil && base.i.syms != nil { // If base has a symbol table, use that.
-		b.syms = base.i.syms.symbolTable
+	if base.i != nil && base.syms() != nil { // If base has a symbol table, use that.
+		b.syms = base.syms().symbolTable
 	} else if b.syms == nil { // Or continue using previous symbol table in builder.
 		b.syms = NewSymbolTable() // Don't do this in performance-sensitive code.
 	}
