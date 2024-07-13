@@ -35,7 +35,7 @@ type Labels struct {
 type internals struct {
 	syms   *nameTable
 	length uint16
-	data   [1]byte // Variable sized.
+	data   [1]byte // Actually variable sized.
 }
 
 // Split SymbolTable into the part used by Labels and the part used by Builder.  Only the latter needs the map.
@@ -115,11 +115,11 @@ func (ls Labels) syms() *nameTable {
 }
 
 func (ls Labels) dataSlice() []byte {
-	return unsafe.Slice((*byte)(unsafe.Pointer(&ls.i.data[0])), ls.length())
+	return unsafe.Slice((*byte)(unsafe.Pointer(&ls.i.data)), ls.length())
 }
 
 func (ls Labels) twoBytesAt(index int) *[2]byte {
-	addr := unsafe.Pointer(&ls.i.data[0])
+	addr := unsafe.Pointer(&ls.i.data)
 	return (*[2]byte)(unsafe.Pointer(uintptr(addr) + uintptr(index)))
 }
 
@@ -340,7 +340,7 @@ func (ls Labels) BytesWithoutLabels(buf []byte, names ...string) []byte {
 }
 
 func makeLabels(syms *nameTable, data []byte) Labels {
-	block := make([]byte, len(data)+8+2)
+	block := make([]byte, len(data)+int(unsafe.Sizeof(internals{})))
 	i := (*internals)(unsafe.Pointer(unsafe.SliceData(block)))
 	i.syms = syms
 	i.length = uint16(len(data))
@@ -350,10 +350,10 @@ func makeLabels(syms *nameTable, data []byte) Labels {
 
 // Copy returns a copy of the labels.
 func (ls Labels) Copy() Labels {
-	dst := make([]byte, ls.i.length+8+2)
-	src := unsafe.Slice((*byte)(unsafe.Pointer(ls.i)), ls.i.length+8+2)
-	copy(dst, src)
-	i := (*internals)(unsafe.Pointer(unsafe.SliceData(dst)))
+	block := make([]byte, ls.length()+int(unsafe.Sizeof(internals{})))
+	src := unsafe.Slice((*byte)(unsafe.Pointer(ls.i)), len(block))
+	copy(block, src)
+	i := (*internals)(unsafe.Pointer(unsafe.SliceData(block)))
 	return Labels{i: i}
 }
 
