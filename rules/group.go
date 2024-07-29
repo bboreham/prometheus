@@ -16,6 +16,7 @@ package rules
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"slices"
 	"strings"
@@ -231,6 +232,7 @@ func (g *Group) run(ctx context.Context) {
 			return
 		}
 		go func(now time.Time) {
+			fmt.Printf("Prepare series as stale: %s\n", g.name)
 			for _, rule := range g.seriesInPreviousEval {
 				for _, r := range rule {
 					g.staleSeries = append(g.staleSeries, r)
@@ -244,6 +246,7 @@ func (g *Group) run(ctx context.Context) {
 			select {
 			case <-g.managerDone:
 			case <-time.After(2 * g.interval):
+				fmt.Printf("Marking series as stale: %s\n", g.name)
 				g.cleanupStaleSeries(ctx, now)
 			}
 		}(time.Now())
@@ -285,6 +288,7 @@ func (g *Group) run(ctx context.Context) {
 			case <-g.done:
 				return
 			case <-tick.C:
+				fmt.Printf("Rule tick: %s\n", g.name)
 				missed := (time.Since(evalTimestamp) / g.interval) - 1
 				if missed > 0 {
 					g.metrics.IterationsMissed.WithLabelValues(GroupKey(g.file, g.name)).Add(float64(missed))
@@ -299,6 +303,7 @@ func (g *Group) run(ctx context.Context) {
 }
 
 func (g *Group) stop() {
+	fmt.Printf("Group stop: %s\n", g.name)
 	close(g.done)
 	<-g.terminated
 }

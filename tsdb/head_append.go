@@ -459,6 +459,7 @@ func (s *memSeries) appendable(t int64, v float64, headMaxt, minValidTime, oooTi
 		}
 		msMaxt := s.maxTime()
 		if t > msMaxt {
+			fmt.Printf("Value %v at time %v is in-order\n", v, t)
 			return false, 0, nil
 		}
 		if t == msMaxt {
@@ -470,22 +471,26 @@ func (s *memSeries) appendable(t int64, v float64, headMaxt, minValidTime, oooTi
 				return false, 0, storage.NewDuplicateFloatErr(t, s.lastValue, v)
 			}
 			// Sample is identical (ts + value) with most current (highest ts) sample in sampleBuf.
+			fmt.Printf("Value %v at time %v is identical\n", v, t)
 			return false, 0, nil
 		}
 	}
 
 	// The sample cannot go in the in-order chunk. Check if it can go in the out-of-order chunk.
 	if oooTimeWindow > 0 && t >= headMaxt-oooTimeWindow {
+		fmt.Printf("Value %v at time %v is out-of-order\n", v, t)
 		return true, headMaxt - t, nil
 	}
 
 	// The sample cannot go in both in-order and out-of-order chunk.
 	if oooTimeWindow > 0 {
+		fmt.Printf("Value %v at time %v is too old\n", v, t)
 		return true, headMaxt - t, storage.ErrTooOldSample
 	}
 	if t < minValidTime {
 		return false, headMaxt - t, storage.ErrOutOfBounds
 	}
+	fmt.Printf("Value %v at time %v is rejected\n", v, t)
 	return false, headMaxt - t, storage.ErrOutOfOrderSample
 }
 
