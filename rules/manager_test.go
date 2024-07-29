@@ -2154,3 +2154,92 @@ func optsFactory(storage storage.Storage, maxInflight, inflightQueries *atomic.I
 		},
 	}
 }
+
+func TestRuleMovedBetweenFiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	storage := teststorage.New(t)
+	defer storage.Close()
+	opts := promql.EngineOpts{
+		Logger:     nil,
+		Reg:        nil,
+		MaxSamples: 10,
+		Timeout:    10 * time.Second,
+	}
+	engine := promql.NewEngine(opts)
+	ruleManager := NewManager(&ManagerOptions{
+		Appendable: storage,
+		Queryable:  storage,
+		QueryFunc:  EngineQueryFunc(engine, storage),
+		Context:    context.Background(),
+		Logger:     log.NewNopLogger(),
+	})
+	var stopped bool
+	ruleManager.start()
+	defer func() {
+		if !stopped {
+			ruleManager.Stop()
+		}
+	}()
+
+	// file paths defination
+	file1 := "fixtures/rules2.yaml"
+	file2 := "fixtures/rules1.yaml"
+
+	// Load initial configuration
+	require.NoError(t, ruleManager.Update(1*time.Second, []string{file1}, labels.EmptyLabels(), "", nil))
+
+	// Wait for rule to be evaluated
+	time.Sleep(5 * time.Second)
+
+	// Reload configuration
+	require.NoError(t, ruleManager.Update(1*time.Second, []string{file2}, labels.EmptyLabels(), "", nil))
+
+	// Wait for rule to be evaluated in new location and potential staleness marker
+	time.Sleep(5 * time.Second)
+
+	// Print files content after reloading
+	content1, _ := os.ReadFile(file1)
+	fmt.Printf("Content of %s:\n%s\n", file1, string(content1))
+	content2, _ := os.ReadFile(file2)
+	fmt.Printf("Content of %s:\n%s\n", file2, string(content2))
+
+	// Query the data
+	querier, err := storage.Querier(0, time.Now().Unix()*1000)
+	require.NoError(t, err)
+	defer querier.Close()
+
+	matcher, err := labels.NewMatcher(labels.MatchEqual, model.MetricNameLabel, "test_2")
+	require.NoError(t, err)
+
+	set := querier.Select(context.Background(), false, nil, matcher)
+	samples, err := readSeriesSet(set)
+	require.NoError(t, err)
+
+	// Print the samples
+	fmt.Printf("Samples: %+v\n", samples)
+
+	// Verify that we have continuous data without gaps
+	require.NotEmpty(t, samples)
+	metric := labels.FromStrings(model.MetricNameLabel, "test_2").String()
+	_, ok := samples[metric]
+
+	require.True(t, ok, "Series %s not returned.", metric)
+
+	// Print the metric
+	fmt.Printf("Metric: %s\n", metric)
+
+	// Verify no out-of-order samples
+	for _, s := range samples {
+		var prevT int64
+		for _, p := range s {
+			fmt.Printf("Comparing timestamp %d with previous %d\n", p.T, prevT)
+			require.Greater(t, p.T, prevT)
+			prevT = p.T
+		}
+	}
+
+	require.Equal(t, 0, countStaleNaN(t, storage)) // Not expecting any stale markers.
+}
