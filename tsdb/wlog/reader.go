@@ -37,6 +37,8 @@ type Reader struct {
 	curRecTyp   recType // Used for checking that the last record is not torn.
 }
 
+var _ RecordReader = &Reader{}
+
 // NewReader returns a new reader.
 func NewReader(r io.Reader) *Reader {
 	// Calling zstd.NewReader with a nil io.Reader and no options cannot return an error.

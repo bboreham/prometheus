@@ -97,6 +97,8 @@ type LiveReader struct {
 	metrics *LiveReaderMetrics
 }
 
+var _ RecordReader = &LiveReader{}
+
 // Err returns any errors encountered reading the WAL.  io.EOFs are not terminal
 // and Next can be tried again.  Non-EOFs are terminal, and the reader should
 // not be used again.  It is up to the user to decide when to stop trying should

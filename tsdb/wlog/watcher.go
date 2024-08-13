@@ -44,6 +44,14 @@ var (
 	readTimeout  = 15 * time.Second
 )
 
+// RecordReader defines the functions used to step through WAL segments.
+type RecordReader interface {
+	Next() bool
+	Err() error
+	Record() []byte
+	Offset() int64
+}
+
 // WriteTo is an interface used by the Watcher to send the samples it's read
 // from the WAL on to somewhere else. Functions will be called concurrently
 // and it is left to the implementer to make sure they are safe.
@@ -331,7 +339,7 @@ func (w *Watcher) findSegmentForIndex(index int) (int, error) {
 	return -1, errors.New("failed to find segment for index")
 }
 
-func (w *Watcher) readAndHandleError(r *LiveReader, segmentNum int, tail bool, size int64) error {
+func (w *Watcher) readAndHandleError(r RecordReader, segmentNum int, tail bool, size int64) error {
 	err := w.readSegment(r, segmentNum, tail)
 
 	// Ignore all errors reading to end of segment whilst replaying the WAL.
@@ -476,7 +484,7 @@ func (w *Watcher) garbageCollectSeries(segmentNum int) error {
 
 // Read from a segment and pass the details to w.writer.
 // Also used with readCheckpoint - implements segmentReadFn.
-func (w *Watcher) readSegment(r *LiveReader, segmentNum int, tail bool) error {
+func (w *Watcher) readSegment(r RecordReader, segmentNum int, tail bool) error {
 	var (
 		dec                   = record.NewDecoder(labels.NewSymbolTable()) // One table per WAL segment means it won't grow indefinitely.
 		series                []record.RefSeries
@@ -625,7 +633,7 @@ func (w *Watcher) readSegment(r *LiveReader, segmentNum int, tail bool) error {
 
 // Go through all series in a segment updating the segmentNum, so we can delete older series.
 // Used with readCheckpoint - implements segmentReadFn.
-func (w *Watcher) readSegmentForGC(r *LiveReader, segmentNum int, _ bool) error {
+func (w *Watcher) readSegmentForGC(r RecordReader, segmentNum int, _ bool) error {
 	var (
 		dec    = record.NewDecoder(labels.NewSymbolTable()) // Needed for decoding; labels do not outlive this function.
 		series []record.RefSeries
@@ -664,7 +672,7 @@ func (w *Watcher) SetStartTime(t time.Time) {
 	w.startTimestamp = timestamp.FromTime(t)
 }
 
-type segmentReadFn func(w *Watcher, r *LiveReader, segmentNum int, tail bool) error
+type segmentReadFn func(w *Watcher, r RecordReader, segmentNum int, tail bool) error
 
 // Read all the series records from a Checkpoint directory.
 func (w *Watcher) readCheckpoint(checkpointDir string, readFn segmentReadFn) error {
@@ -690,7 +698,7 @@ func (w *Watcher) readCheckpoint(checkpointDir string, readFn segmentReadFn) err
 			return fmt.Errorf("unable to open segment: %w", err)
 		}
 
-		r := NewLiveReader(w.logger, w.readerMetrics, sr)
+		r := NewReader(sr)
 		err = readFn(w, r, index, false)
 		sr.Close()
 		if err != nil && !errors.Is(err, io.EOF) {

@@ -36,23 +36,16 @@ import (
 	"github.com/prometheus/prometheus/util/testutil"
 )
 
-type reader interface {
-	Next() bool
-	Err() error
-	Record() []byte
-	Offset() int64
-}
-
 type rec struct {
 	t recType
 	b []byte
 }
 
-var readerConstructors = map[string]func(io.Reader) reader{
-	"Reader": func(r io.Reader) reader {
+var readerConstructors = map[string]func(io.Reader) RecordReader{
+	"Reader": func(r io.Reader) RecordReader {
 		return NewReader(r)
 	},
-	"LiveReader": func(r io.Reader) reader {
+	"LiveReader": func(r io.Reader) RecordReader {
 		lr := NewLiveReader(log.NewNopLogger(), NewLiveReaderMetrics(nil), r)
 		lr.eofNonErr = true
 		return lr
