@@ -19,7 +19,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"math/rand"
 	"strings"
 	"sync"
 	"testing"
@@ -118,9 +117,6 @@ func (a *collectResultAppender) Append(ref storage.SeriesRef, lset labels.Labels
 		f:      v,
 	})
 
-	if ref == 0 {
-		ref = storage.SeriesRef(rand.Uint64())
-	}
 	if a.next == nil {
 		return ref, nil
 	}
@@ -158,9 +154,6 @@ func (a *collectResultAppender) UpdateMetadata(ref storage.SeriesRef, l labels.L
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 	a.pendingMetadata = append(a.pendingMetadata, m)
-	if ref == 0 {
-		ref = storage.SeriesRef(rand.Uint64())
-	}
 	if a.next == nil {
 		return ref, nil
 	}
