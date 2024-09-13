@@ -254,9 +254,9 @@ func PostingsForMatchers(ctx context.Context, ix IndexReader, ms ...*labels.Matc
 				return nil, err
 			}
 			its = append(its, allPostings)
-		case m.Type == labels.MatchRegexp && (m.Value == ".*" || m.Value == "^.*$"):
+		case m.Type == labels.MatchRegexp && m.Value == ".*":
 			// .* regexp matches any string: do nothing.
-		case m.Type == labels.MatchNotRegexp && (m.Value == ".*" || m.Value == "^.*$"):
+		case m.Type == labels.MatchNotRegexp && m.Value == ".*":
 			return index.EmptyPostings(), nil
 		case labelMustBeSet[m.Name]:
 			// If this matcher must be non-empty, we can be smarter.
