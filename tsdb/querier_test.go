@@ -2816,6 +2816,7 @@ func TestPostingsForMatchers(t *testing.T) {
 			exp: []labels.Labels{
 				labels.FromStrings("n", "1", "i", "a"),
 				labels.FromStrings("n", "1", "i", "b"),
+				labels.FromStrings("n", "1", "i", "\n"),
 			},
 		},
 		// Not regex.
@@ -2884,7 +2885,6 @@ func TestPostingsForMatchers(t *testing.T) {
 			matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "n", "1"), labels.MustNewMatcher(labels.MatchNotRegexp, "i", "^.+$")},
 			exp: []labels.Labels{
 				labels.FromStrings("n", "1"),
-				labels.FromStrings("n", "1", "i", "\n"),
 			},
 		},
 		// Combinations.

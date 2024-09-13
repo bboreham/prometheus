@@ -38,6 +38,7 @@ var (
 		"^.*foo$",
 		"^.+foo$",
 		".?",
+		".*",
 		".+",
 		"foo.+",
 		".+foo",
@@ -90,9 +91,6 @@ var (
 		"((.*))(?i:f)((.*))o((.*))o((.*))",
 		"((.*))f((.*))(?i:o)((.*))o((.*))",
 	}
-	regexesDotstar = []string{
-		".*",
-	}
 	values = []string{
 		"foo", " foo bar", "bar", "buzz\nbar", "bar foo", "bfoo", "\n", "\nfoo", "foo\n", "hello foo world", "hello foo\n world", "",
 		"FOO", "Foo", "fOo", "foO", "OO", "Oo", "\nfoo\n", strings.Repeat("f", 20), "prometheus", "prometheus_api_v1", "prometheus_api_v1_foo",
@@ -116,26 +114,6 @@ func TestFastRegexMatcher_MatchString(t *testing.T) {
 	testValues = append(testValues, generateRandomValues()...)
 
 	for _, r := range regexes {
-		r := r
-		for _, v := range testValues {
-			v := v
-			t.Run(readable(r)+` on "`+readable(v)+`"`, func(t *testing.T) {
-				t.Parallel()
-				m, err := NewFastRegexMatcher(r)
-				require.NoError(t, err)
-				re := regexp.MustCompile("^(?:" + r + ")$")
-				require.Equal(t, re.MatchString(v), m.MatchString(v))
-			})
-		}
-	}
-}
-
-func TestFastRegexMatcher_DotStar(t *testing.T) {
-	// Run the test both against a set of predefined values and a set of random ones.
-	testValues := append([]string{}, values...)
-	testValues = append(testValues, generateRandomValues()...)
-
-	for _, r := range regexesDotstar {
 		r := r
 		for _, v := range testValues {
 			v := v
