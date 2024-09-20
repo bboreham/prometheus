@@ -3545,6 +3545,9 @@ func TestQueryOOOHeadDuringTruncate(t *testing.T) {
 		func(db *DB, minT, maxT int64) (storage.LabelQuerier, error) {
 			return db.Querier(minT, maxT)
 		},
+		1,
+		func(t *testing.T, lq storage.LabelQuerier, minT, _ int64) {
+		},
 		func(t *testing.T, lq storage.LabelQuerier, minT, _ int64) {
 			// Samples
 			q, ok := lq.(storage.Querier)
@@ -3564,40 +3567,48 @@ func TestQueryOOOHeadDuringTruncate(t *testing.T) {
 }
 
 func TestChunkQueryOOOHeadDuringTruncate(t *testing.T) {
+	const nSeries = 1000
+	var ss storage.ChunkSeriesSet
 	testQueryOOOHeadDuringTruncate(t,
 		func(db *DB, minT, maxT int64) (storage.LabelQuerier, error) {
 			return db.ChunkQuerier(minT, maxT)
 		},
+		nSeries,
 		func(t *testing.T, lq storage.LabelQuerier, minT, _ int64) {
 			// Chunks
 			q, ok := lq.(storage.ChunkQuerier)
 			require.True(t, ok)
-			ss := q.Select(context.Background(), false, nil, labels.MustNewMatcher(labels.MatchEqual, "a", "b"))
-			require.True(t, ss.Next())
-			s := ss.At()
-			require.False(t, ss.Next()) // One series.
-			metaIt := s.Iterator(nil)
-			require.True(t, metaIt.Next())
-			meta := metaIt.At()
-			// Samples
-			it := meta.Chunk.Iterator(nil)
-			require.NotEqual(t, chunkenc.ValNone, it.Next()) // Has some data.
-			require.Equal(t, minT, it.AtT())                 // It is an in-order sample.
-			require.NotEqual(t, chunkenc.ValNone, it.Next()) // Has some data.
-			require.Equal(t, minT+50, it.AtT())              // it is an out-of-order sample.
-			require.NoError(t, it.Err())
+			ss = q.Select(context.Background(), false, nil, labels.MustNewMatcher(labels.MatchEqual, "a", "b"))
+		},
+		func(t *testing.T, lq storage.LabelQuerier, minT, _ int64) {
+			for si := 0; si < nSeries; si++ {
+				require.True(t, ss.Next())
+				s := ss.At()
+				metaIt := s.Iterator(nil)
+				require.True(t, metaIt.Next())
+				meta := metaIt.At()
+				// Samples
+				it := meta.Chunk.Iterator(nil)
+				require.NotEqual(t, chunkenc.ValNone, it.Next()) // Has some data.
+				require.Equal(t, minT, it.AtT())                 // It is an in-order sample.
+				require.NotEqual(t, chunkenc.ValNone, it.Next()) // Has some data.
+				require.Equal(t, minT+50, it.AtT())              // it is an out-of-order sample.
+				require.NoError(t, it.Err())
+			}
+			require.False(t, ss.Next()) // No more series.
 		},
 	)
 }
 
-func testQueryOOOHeadDuringTruncate(t *testing.T, makeQuerier func(db *DB, minT, maxT int64) (storage.LabelQuerier, error), verify func(t *testing.T, q storage.LabelQuerier, minT, maxT int64)) {
-	const maxT int64 = 6000
+func testQueryOOOHeadDuringTruncate(t *testing.T, makeQuerier func(db *DB, minT, maxT int64) (storage.LabelQuerier, error), nSeries int,
+	verifyStart func(t *testing.T, q storage.LabelQuerier, minT, maxT int64),
+	verify func(t *testing.T, q storage.LabelQuerier, minT, maxT int64)) {
+	const maxT int64 = 12000
 
 	dir := t.TempDir()
 	opts := DefaultOptions()
 	opts.EnableNativeHistograms = true
 	opts.OutOfOrderTimeWindow = maxT
-	opts.MinBlockDuration = maxT / 2 // So that head will compact up to 3000.
 
 	db, err := Open(dir, nil, nil, opts, nil)
 	require.NoError(t, err)
@@ -3606,23 +3617,29 @@ func testQueryOOOHeadDuringTruncate(t *testing.T, makeQuerier func(db *DB, minT,
 	})
 	db.DisableCompactions()
 
-	var (
-		ref = storage.SeriesRef(0)
-		app = db.Appender(context.Background())
-	)
-	// Add in-order samples at every 100ms starting at 0ms.
-	for i := int64(0); i < maxT; i += 100 {
-		_, err := app.Append(ref, labels.FromStrings("a", "b"), i, 0)
-		require.NoError(t, err)
+	for si := 0; si < nSeries; si++ {
+		var (
+			ref storage.SeriesRef
+			app = db.Appender(context.Background())
+			err error
+		)
+		lbls := labels.FromStrings("a", "b", "x", fmt.Sprintf("x%d", si))
+		// Add in-order samples at every 100ms starting at 0ms.
+		for i := int64(0); i < maxT; i += 100 {
+			ref, err = app.Append(ref, lbls, i, 0)
+			require.NoError(t, err)
+		}
+		// Add out-of-order samples at every 100ms starting at 50ms.
+		for i := int64(50); i < maxT; i += 100 {
+			ref, err = app.Append(ref, lbls, i, 0)
+			require.NoError(t, err)
+		}
+		require.NoError(t, app.Commit())
 	}
-	// Add out-of-order samples at every 100ms starting at 50ms.
-	for i := int64(50); i < maxT; i += 100 {
-		_, err := app.Append(ref, labels.FromStrings("a", "b"), i, 0)
-		require.NoError(t, err)
-	}
-	require.NoError(t, app.Commit())
 
-	requireEqualOOOSamples(t, int(maxT/100-1), db)
+	requireEqualOOOSamples(t, nSeries*int(maxT/100-1), db)
+
+	db.head.chunkRange.Store(maxT / 2) // So that head will compact up to 6000.
 
 	// Synchronization points.
 	allowQueryToStart := make(chan struct{})
@@ -3640,19 +3657,19 @@ func testQueryOOOHeadDuringTruncate(t *testing.T, makeQuerier func(db *DB, minT,
 		compactionFinished <- struct{}{}
 	}()
 
-	// Wait for the compaction to start.
-	<-allowQueryToStart
-
 	q, err := makeQuerier(db, 1500, 2500)
 	require.NoError(t, err)
-	queryStarted <- struct{}{} // Unblock the compaction.
+	verifyStart(t, q, 1500, 2500)
 	ctx := context.Background()
+
+	// Wait for the compaction to start.
+	<-allowQueryToStart
 
 	// Label names.
 	res, annots, err := q.LabelNames(ctx, nil, labels.MustNewMatcher(labels.MatchEqual, "a", "b"))
 	require.NoError(t, err)
 	require.Empty(t, annots)
-	require.Equal(t, []string{"a"}, res)
+	require.Equal(t, []string{"a", "x"}, res)
 
 	// Label values.
 	res, annots, err = q.LabelValues(ctx, "a", nil, labels.MustNewMatcher(labels.MatchEqual, "a", "b"))
@@ -3660,6 +3677,7 @@ func testQueryOOOHeadDuringTruncate(t *testing.T, makeQuerier func(db *DB, minT,
 	require.Empty(t, annots)
 	require.Equal(t, []string{"b"}, res)
 
+	queryStarted <- struct{}{} // Unblock the compaction.
 	verify(t, q, 1500, 2500)
 
 	require.NoError(t, q.Close()) // Cannot be deferred as the compaction waits for queries to close before finishing.
