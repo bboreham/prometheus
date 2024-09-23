@@ -826,19 +826,29 @@ func genSeriesFromSampleGenerator(totalSeries, labelCount int, mint, maxt, step 
 		return nil
 	}
 
+	names := make([]string, labelCount)
+	for j := 0; j < labelCount; j++ {
+		names[j] = defaultLabelName + strconv.Itoa(j)
+	}
+	values := make([]string, labelCount)
+	for j := 0; j < labelCount; j++ {
+		values[j] = defaultLabelValue + strconv.Itoa(j)
+	}
 	series := make([]storage.Series, totalSeries)
+	b := labels.NewScratchBuilder(labelCount)
 
 	for i := 0; i < totalSeries; i++ {
-		lbls := make(map[string]string, labelCount)
-		lbls[defaultLabelName] = strconv.Itoa(i)
-		for j := 1; len(lbls) < labelCount; j++ {
-			lbls[defaultLabelName+strconv.Itoa(j)] = defaultLabelValue + strconv.Itoa(j)
+		b.Reset()
+		b.Add(defaultLabelName, strconv.Itoa(i))
+		for j := 1; j < labelCount; j++ {
+			b.Add(names[j], values[j])
 		}
 		samples := make([]chunks.Sample, 0, (maxt-mint)/step+1)
 		for t := mint; t < maxt; t += step {
 			samples = append(samples, generator(t))
 		}
-		series[i] = storage.NewListSeries(labels.FromMap(lbls), samples)
+		b.Sort()
+		series[i] = storage.NewListSeries(b.Labels(), samples)
 	}
 	return series
 }
