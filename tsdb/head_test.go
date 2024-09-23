@@ -128,17 +128,27 @@ func BenchmarkLoadRealWLs(b *testing.B) {
 }
 
 func BenchmarkCreateSeries(b *testing.B) {
-	series := genSeries(b.N, 10, 0, 0)
-	h, _ := newTestHead(b, 10000, wlog.CompressionNone, false)
-	b.Cleanup(func() {
-		require.NoError(b, h.Close())
-	})
-
-	b.ReportAllocs()
+	const maxSeries = 1000000
+	series := genSeries(maxSeries, 20, 0, 0)
+	hashes := make([]uint64, len(series))
+	for i := range series {
+		hashes[i] = series[i].Labels().Hash()
+	}
 	b.ResetTimer()
 
-	for _, s := range series {
-		h.getOrCreate(s.Labels().Hash(), s.Labels())
+	for nSeries := 100; nSeries <= maxSeries; nSeries *= 100 {
+		b.Run(fmt.Sprint(nSeries), func(b *testing.B) {
+			h, _ := newTestHead(b, 10000, wlog.CompressionNone, false)
+			b.Cleanup(func() {
+				require.NoError(b, h.Close())
+			})
+			for i := 0; i < b.N; i++ {
+				h.resetInMemoryState()
+				for si, s := range series[:nSeries] {
+					h.getOrCreate(hashes[si], s.Labels())
+				}
+			}
+		})
 	}
 }
 
