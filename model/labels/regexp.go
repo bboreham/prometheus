@@ -887,17 +887,24 @@ func (m *equalMultiStringMapMatcher) setMatches() []string {
 }
 
 func (m *equalMultiStringMapMatcher) Matches(s string) bool {
-	s2 := s
-	if !m.caseSensitive {
-		var a [256]byte
-		s2 = toNormalisedLower(s, a[:])
+	if len(m.values) > 0 {
+		s2 := s
+		if !m.caseSensitive {
+			var a [256]byte
+			s2 = toNormalisedLower(s, a[:])
+		}
+		if _, ok := m.values[s2]; ok {
+			return true
+		}
 	}
 
-	if _, ok := m.values[s2]; ok {
-		return true
-	}
-	if m.minPrefixLen > 0 && len(s2) >= m.minPrefixLen {
-		for _, matcher := range m.prefixes[s2[:m.minPrefixLen]] {
+	if m.minPrefixLen > 0 && len(s) >= m.minPrefixLen {
+		s2 := s[:m.minPrefixLen]
+		if !m.caseSensitive {
+			var a [256]byte
+			s2 = toNormalisedLower(s[:m.minPrefixLen], a[:])
+		}
+		for _, matcher := range m.prefixes[s2] {
 			if matcher.Matches(s) {
 				return true
 			}
