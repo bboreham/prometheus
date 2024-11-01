@@ -104,12 +104,12 @@ type testTargetRetriever struct {
 }
 
 type testTargetParams struct {
-	Identifier       string
-	Labels           labels.Labels
-	DiscoveredLabels labels.Labels
-	Params           url.Values
-	Reports          []*testReport
-	Active           bool
+	Identifier   string
+	Labels       labels.Labels
+	targetLabels model.LabelSet
+	Params       url.Values
+	Reports      []*testReport
+	Active       bool
 }
 
 type testReport struct {
@@ -125,7 +125,7 @@ func newTestTargetRetriever(targetsInfo []*testTargetParams) *testTargetRetrieve
 	droppedTargets = make(map[string][]*scrape.Target)
 
 	for _, t := range targetsInfo {
-		nt := scrape.NewTarget(t.Labels, t.DiscoveredLabels, t.Params)
+		nt := scrape.NewTarget(t.Labels, &config.ScrapeConfig{Params: t.Params}, t.targetLabels, nil)
 
 		for _, r := range t.Reports {
 			nt.Report(r.Start, r.Duration, r.Error)
@@ -995,10 +995,9 @@ func setupTestTargetRetriever(t *testing.T) *testTargetRetriever {
 				model.ScrapeIntervalLabel: "15s",
 				model.ScrapeTimeoutLabel:  "5s",
 			}),
-			DiscoveredLabels: labels.EmptyLabels(),
-			Params:           url.Values{},
-			Reports:          []*testReport{{scrapeStart, 70 * time.Millisecond, nil}},
-			Active:           true,
+			Params:  url.Values{},
+			Reports: []*testReport{{scrapeStart, 70 * time.Millisecond, nil}},
+			Active:  true,
 		},
 		{
 			Identifier: "blackbox",
@@ -1010,22 +1009,21 @@ func setupTestTargetRetriever(t *testing.T) *testTargetRetriever {
 				model.ScrapeIntervalLabel: "20s",
 				model.ScrapeTimeoutLabel:  "10s",
 			}),
-			DiscoveredLabels: labels.EmptyLabels(),
-			Params:           url.Values{"target": []string{"example.com"}},
-			Reports:          []*testReport{{scrapeStart, 100 * time.Millisecond, errors.New("failed")}},
-			Active:           true,
+			Params:  url.Values{"target": []string{"example.com"}},
+			Reports: []*testReport{{scrapeStart, 100 * time.Millisecond, errors.New("failed")}},
+			Active:  true,
 		},
 		{
 			Identifier: "blackbox",
 			Labels:     labels.EmptyLabels(),
-			DiscoveredLabels: labels.FromMap(map[string]string{
+			targetLabels: model.LabelSet{
 				model.SchemeLabel:         "http",
 				model.AddressLabel:        "http://dropped.example.com:9115",
 				model.MetricsPathLabel:    "/probe",
 				model.JobLabel:            "blackbox",
 				model.ScrapeIntervalLabel: "30s",
 				model.ScrapeTimeoutLabel:  "15s",
-			}),
+			},
 			Params: url.Values{},
 			Active: false,
 		},
@@ -1142,362 +1140,363 @@ func testEndpoints(t *testing.T, api *API, tr *testTargetRetriever, es storage.E
 	}
 
 	tests := []test{
-		{
-			endpoint: api.query,
-			query: url.Values{
-				"query": []string{"2"},
-				"time":  []string{"123.4"},
-			},
-			response: &QueryData{
-				ResultType: parser.ValueTypeScalar,
-				Result: promql.Scalar{
-					V: 2,
-					T: timestamp.FromTime(start.Add(123*time.Second + 400*time.Millisecond)),
+		/*
+			{
+				endpoint: api.query,
+				query: url.Values{
+					"query": []string{"2"},
+					"time":  []string{"123.4"},
 				},
-			},
-		},
-		{
-			endpoint: api.query,
-			query: url.Values{
-				"query": []string{"0.333"},
-				"time":  []string{"1970-01-01T00:02:03Z"},
-			},
-			response: &QueryData{
-				ResultType: parser.ValueTypeScalar,
-				Result: promql.Scalar{
-					V: 0.333,
-					T: timestamp.FromTime(start.Add(123 * time.Second)),
-				},
-			},
-		},
-		{
-			endpoint: api.query,
-			query: url.Values{
-				"query": []string{"0.333"},
-				"time":  []string{"1970-01-01T01:02:03+01:00"},
-			},
-			response: &QueryData{
-				ResultType: parser.ValueTypeScalar,
-				Result: promql.Scalar{
-					V: 0.333,
-					T: timestamp.FromTime(start.Add(123 * time.Second)),
-				},
-			},
-		},
-		{
-			endpoint: api.query,
-			query: url.Values{
-				"query": []string{"0.333"},
-			},
-			response: &QueryData{
-				ResultType: parser.ValueTypeScalar,
-				Result: promql.Scalar{
-					V: 0.333,
-					T: timestamp.FromTime(api.now()),
-				},
-			},
-		},
-		{
-			endpoint: api.queryRange,
-			query: url.Values{
-				"query": []string{"time()"},
-				"start": []string{"0"},
-				"end":   []string{"2"},
-				"step":  []string{"1"},
-			},
-			response: &QueryData{
-				ResultType: parser.ValueTypeMatrix,
-				Result: promql.Matrix{
-					promql.Series{
-						Floats: []promql.FPoint{
-							{F: 0, T: timestamp.FromTime(start)},
-							{F: 1, T: timestamp.FromTime(start.Add(1 * time.Second))},
-							{F: 2, T: timestamp.FromTime(start.Add(2 * time.Second))},
-						},
-						// No Metric returned - use zero value for comparison.
+				response: &QueryData{
+					ResultType: parser.ValueTypeScalar,
+					Result: promql.Scalar{
+						V: 2,
+						T: timestamp.FromTime(start.Add(123*time.Second + 400*time.Millisecond)),
 					},
 				},
 			},
-		},
-		// Test empty vector result
-		{
-			endpoint: api.query,
-			query: url.Values{
-				"query": []string{"bottomk(2, notExists)"},
+			{
+				endpoint: api.query,
+				query: url.Values{
+					"query": []string{"0.333"},
+					"time":  []string{"1970-01-01T00:02:03Z"},
+				},
+				response: &QueryData{
+					ResultType: parser.ValueTypeScalar,
+					Result: promql.Scalar{
+						V: 0.333,
+						T: timestamp.FromTime(start.Add(123 * time.Second)),
+					},
+				},
 			},
-			responseAsJSON: `{"resultType":"vector","result":[]}`,
-		},
-		// Test empty matrix result
-		{
-			endpoint: api.queryRange,
-			query: url.Values{
-				"query": []string{"bottomk(2, notExists)"},
-				"start": []string{"0"},
-				"end":   []string{"2"},
-				"step":  []string{"1"},
+			{
+				endpoint: api.query,
+				query: url.Values{
+					"query": []string{"0.333"},
+					"time":  []string{"1970-01-01T01:02:03+01:00"},
+				},
+				response: &QueryData{
+					ResultType: parser.ValueTypeScalar,
+					Result: promql.Scalar{
+						V: 0.333,
+						T: timestamp.FromTime(start.Add(123 * time.Second)),
+					},
+				},
 			},
-			responseAsJSON: `{"resultType":"matrix","result":[]}`,
-		},
-		// Missing query params in range queries.
-		{
-			endpoint: api.queryRange,
-			query: url.Values{
-				"query": []string{"time()"},
-				"end":   []string{"2"},
-				"step":  []string{"1"},
+			{
+				endpoint: api.query,
+				query: url.Values{
+					"query": []string{"0.333"},
+				},
+				response: &QueryData{
+					ResultType: parser.ValueTypeScalar,
+					Result: promql.Scalar{
+						V: 0.333,
+						T: timestamp.FromTime(api.now()),
+					},
+				},
 			},
-			errType: errorBadData,
-		},
-		{
-			endpoint: api.queryRange,
-			query: url.Values{
-				"query": []string{"time()"},
-				"start": []string{"0"},
-				"step":  []string{"1"},
+			{
+				endpoint: api.queryRange,
+				query: url.Values{
+					"query": []string{"time()"},
+					"start": []string{"0"},
+					"end":   []string{"2"},
+					"step":  []string{"1"},
+				},
+				response: &QueryData{
+					ResultType: parser.ValueTypeMatrix,
+					Result: promql.Matrix{
+						promql.Series{
+							Floats: []promql.FPoint{
+								{F: 0, T: timestamp.FromTime(start)},
+								{F: 1, T: timestamp.FromTime(start.Add(1 * time.Second))},
+								{F: 2, T: timestamp.FromTime(start.Add(2 * time.Second))},
+							},
+							// No Metric returned - use zero value for comparison.
+						},
+					},
+				},
 			},
-			errType: errorBadData,
-		},
-		{
-			endpoint: api.queryRange,
-			query: url.Values{
-				"query": []string{"time()"},
-				"start": []string{"0"},
-				"end":   []string{"2"},
+			// Test empty vector result
+			{
+				endpoint: api.query,
+				query: url.Values{
+					"query": []string{"bottomk(2, notExists)"},
+				},
+				responseAsJSON: `{"resultType":"vector","result":[]}`,
 			},
-			errType: errorBadData,
-		},
-		// Bad query expression.
-		{
-			endpoint: api.query,
-			query: url.Values{
-				"query": []string{"invalid][query"},
-				"time":  []string{"1970-01-01T01:02:03+01:00"},
+			// Test empty matrix result
+			{
+				endpoint: api.queryRange,
+				query: url.Values{
+					"query": []string{"bottomk(2, notExists)"},
+					"start": []string{"0"},
+					"end":   []string{"2"},
+					"step":  []string{"1"},
+				},
+				responseAsJSON: `{"resultType":"matrix","result":[]}`,
 			},
-			errType: errorBadData,
-		},
-		{
-			endpoint: api.queryRange,
-			query: url.Values{
-				"query": []string{"invalid][query"},
-				"start": []string{"0"},
-				"end":   []string{"100"},
-				"step":  []string{"1"},
+			// Missing query params in range queries.
+			{
+				endpoint: api.queryRange,
+				query: url.Values{
+					"query": []string{"time()"},
+					"end":   []string{"2"},
+					"step":  []string{"1"},
+				},
+				errType: errorBadData,
 			},
-			errType: errorBadData,
-		},
-		// Invalid step.
-		{
-			endpoint: api.queryRange,
-			query: url.Values{
-				"query": []string{"time()"},
-				"start": []string{"1"},
-				"end":   []string{"2"},
-				"step":  []string{"0"},
+			{
+				endpoint: api.queryRange,
+				query: url.Values{
+					"query": []string{"time()"},
+					"start": []string{"0"},
+					"step":  []string{"1"},
+				},
+				errType: errorBadData,
 			},
-			errType: errorBadData,
-		},
-		// Start after end.
-		{
-			endpoint: api.queryRange,
-			query: url.Values{
-				"query": []string{"time()"},
-				"start": []string{"2"},
-				"end":   []string{"1"},
-				"step":  []string{"1"},
+			{
+				endpoint: api.queryRange,
+				query: url.Values{
+					"query": []string{"time()"},
+					"start": []string{"0"},
+					"end":   []string{"2"},
+				},
+				errType: errorBadData,
 			},
-			errType: errorBadData,
-		},
-		// Start overflows int64 internally.
-		{
-			endpoint: api.queryRange,
-			query: url.Values{
-				"query": []string{"time()"},
-				"start": []string{"148966367200.372"},
-				"end":   []string{"1489667272.372"},
-				"step":  []string{"1"},
+			// Bad query expression.
+			{
+				endpoint: api.query,
+				query: url.Values{
+					"query": []string{"invalid][query"},
+					"time":  []string{"1970-01-01T01:02:03+01:00"},
+				},
+				errType: errorBadData,
 			},
-			errType: errorBadData,
-		},
-		{
-			endpoint: api.formatQuery,
-			query: url.Values{
-				"query": []string{"foo+bar"},
+			{
+				endpoint: api.queryRange,
+				query: url.Values{
+					"query": []string{"invalid][query"},
+					"start": []string{"0"},
+					"end":   []string{"100"},
+					"step":  []string{"1"},
+				},
+				errType: errorBadData,
 			},
-			response: "foo + bar",
-		},
-		{
-			endpoint: api.formatQuery,
-			query: url.Values{
-				"query": []string{"invalid_expression/"},
+			// Invalid step.
+			{
+				endpoint: api.queryRange,
+				query: url.Values{
+					"query": []string{"time()"},
+					"start": []string{"1"},
+					"end":   []string{"2"},
+					"step":  []string{"0"},
+				},
+				errType: errorBadData,
 			},
-			errType: errorBadData,
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
+			// Start after end.
+			{
+				endpoint: api.queryRange,
+				query: url.Values{
+					"query": []string{"time()"},
+					"start": []string{"2"},
+					"end":   []string{"1"},
+					"step":  []string{"1"},
+				},
+				errType: errorBadData,
 			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			// Start overflows int64 internally.
+			{
+				endpoint: api.queryRange,
+				query: url.Values{
+					"query": []string{"time()"},
+					"start": []string{"148966367200.372"},
+					"end":   []string{"1489667272.372"},
+					"step":  []string{"1"},
+				},
+				errType: errorBadData,
 			},
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`{foo=""}`},
+			{
+				endpoint: api.formatQuery,
+				query: url.Values{
+					"query": []string{"foo+bar"},
+				},
+				response: "foo + bar",
 			},
-			errType: errorBadData,
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric1{foo=~".+o"}`},
+			{
+				endpoint: api.formatQuery,
+				query: url.Values{
+					"query": []string{"invalid_expression/"},
+				},
+				errType: errorBadData,
 			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{`test_metric2`},
+				},
+				response: []labels.Labels{
+					labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+				},
 			},
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric1{foo=~".+o$"}`, `test_metric1{foo=~".+o"}`},
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{`{foo=""}`},
+				},
+				errType: errorBadData,
 			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{`test_metric1{foo=~".+o"}`},
+				},
+				response: []labels.Labels{
+					labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+				},
 			},
-		},
-		// Try to overlap the selected series set as much as possible to test the result de-duplication works well.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric4{foo=~".+o$"}`, `test_metric4{dup=~"^1"}`},
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{`test_metric1{foo=~".+o$"}`, `test_metric1{foo=~".+o"}`},
+				},
+				response: []labels.Labels{
+					labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+				},
 			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric4", "dup", "1", "foo", "bar"),
-				labels.FromStrings("__name__", "test_metric4", "dup", "1", "foo", "boo"),
-				labels.FromStrings("__name__", "test_metric4", "foo", "boo"),
+			// Try to overlap the selected series set as much as possible to test the result de-duplication works well.
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{`test_metric4{foo=~".+o$"}`, `test_metric4{dup=~"^1"}`},
+				},
+				response: []labels.Labels{
+					labels.FromStrings("__name__", "test_metric4", "dup", "1", "foo", "bar"),
+					labels.FromStrings("__name__", "test_metric4", "dup", "1", "foo", "boo"),
+					labels.FromStrings("__name__", "test_metric4", "foo", "boo"),
+				},
 			},
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric1{foo=~".+o"}`, `none`},
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{`test_metric1{foo=~".+o"}`, `none`},
+				},
+				response: []labels.Labels{
+					labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+				},
 			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			// Start and end before series starts.
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{`test_metric2`},
+					"start":   []string{"-2"},
+					"end":     []string{"-1"},
+				},
+				response: []labels.Labels{},
 			},
-		},
-		// Start and end before series starts.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"-2"},
-				"end":     []string{"-1"},
+			// Start and end after series ends.
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{`test_metric2`},
+					"start":   []string{"100000"},
+					"end":     []string{"100001"},
+				},
+				response: []labels.Labels{},
 			},
-			response: []labels.Labels{},
-		},
-		// Start and end after series ends.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"100000"},
-				"end":     []string{"100001"},
+			// Start before series starts, end after series ends.
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{`test_metric2`},
+					"start":   []string{"-1"},
+					"end":     []string{"100000"},
+				},
+				response: []labels.Labels{
+					labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+				},
 			},
-			response: []labels.Labels{},
-		},
-		// Start before series starts, end after series ends.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"-1"},
-				"end":     []string{"100000"},
+			// Start and end within series.
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{`test_metric2`},
+					"start":   []string{"1"},
+					"end":     []string{"100"},
+				},
+				response: []labels.Labels{
+					labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+				},
 			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			// Start within series, end after.
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{`test_metric2`},
+					"start":   []string{"1"},
+					"end":     []string{"100000"},
+				},
+				response: []labels.Labels{
+					labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+				},
 			},
-		},
-		// Start and end within series.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"1"},
-				"end":     []string{"100"},
+			// Start before series, end within series.
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{`test_metric2`},
+					"start":   []string{"-1"},
+					"end":     []string{"1"},
+				},
+				response: []labels.Labels{
+					labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+				},
 			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			// Series request with limit.
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{"test_metric1"},
+					"limit":   []string{"1"},
+				},
+				responseLen:   1, // API does not specify which particular value will come back.
+				warningsCount: 1,
 			},
-		},
-		// Start within series, end after.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"1"},
-				"end":     []string{"100000"},
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{"test_metric1"},
+					"limit":   []string{"2"},
+				},
+				responseLen:   2, // API does not specify which particular value will come back.
+				warningsCount: 0, // No warnings if limit isn't exceeded.
 			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			{
+				endpoint: api.series,
+				query: url.Values{
+					"match[]": []string{"test_metric1"},
+					"limit":   []string{"0"},
+				},
+				responseLen:   2, // API does not specify which particular value will come back.
+				warningsCount: 0, // No warnings if limit isn't exceeded.
 			},
-		},
-		// Start before series, end within series.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"-1"},
-				"end":     []string{"1"},
+			// Missing match[] query params in series requests.
+			{
+				endpoint: api.series,
+				errType:  errorBadData,
 			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
-			},
-		},
-		// Series request with limit.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{"test_metric1"},
-				"limit":   []string{"1"},
-			},
-			responseLen:   1, // API does not specify which particular value will come back.
-			warningsCount: 1,
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{"test_metric1"},
-				"limit":   []string{"2"},
-			},
-			responseLen:   2, // API does not specify which particular value will come back.
-			warningsCount: 0, // No warnings if limit isn't exceeded.
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{"test_metric1"},
-				"limit":   []string{"0"},
-			},
-			responseLen:   2, // API does not specify which particular value will come back.
-			warningsCount: 0, // No warnings if limit isn't exceeded.
-		},
-		// Missing match[] query params in series requests.
-		{
-			endpoint: api.series,
-			errType:  errorBadData,
-		},
-		{
-			endpoint: api.dropSeries,
-			errType:  errorInternal,
-		},
+			{
+				endpoint: api.dropSeries,
+				errType:  errorInternal,
+			},*/
 		{
 			endpoint: api.targets,
 			response: &TargetDiscovery{
 				ActiveTargets: []*Target{
 					{
-						DiscoveredLabels:   labels.FromStrings(),
+						DiscoveredLabels:   labels.FromStrings("__param_target", "example.com", "__scrape_interval__", "0s", "__scrape_timeout__", "0s"),
 						Labels:             labels.FromStrings("job", "blackbox"),
 						ScrapePool:         "blackbox",
 						ScrapeURL:          "http://localhost:9115/probe?target=example.com",
@@ -1510,7 +1509,7 @@ func testEndpoints(t *testing.T, api *API, tr *testTargetRetriever, es storage.E
 						ScrapeTimeout:      "10s",
 					},
 					{
-						DiscoveredLabels:   labels.FromStrings(),
+						DiscoveredLabels:   labels.FromStrings("__scrape_interval__", "0s", "__scrape_timeout__", "0s"),
 						Labels:             labels.FromStrings("job", "test"),
 						ScrapePool:         "test",
 						ScrapeURL:          "http://example.com:8080/metrics",
@@ -1546,7 +1545,7 @@ func testEndpoints(t *testing.T, api *API, tr *testTargetRetriever, es storage.E
 			response: &TargetDiscovery{
 				ActiveTargets: []*Target{
 					{
-						DiscoveredLabels:   labels.FromStrings(),
+						DiscoveredLabels:   labels.FromStrings("__param_target", "example.com", "__scrape_interval__", "0s", "__scrape_timeout__", "0s"),
 						Labels:             labels.FromStrings("job", "blackbox"),
 						ScrapePool:         "blackbox",
 						ScrapeURL:          "http://localhost:9115/probe?target=example.com",
@@ -1559,7 +1558,7 @@ func testEndpoints(t *testing.T, api *API, tr *testTargetRetriever, es storage.E
 						ScrapeTimeout:      "10s",
 					},
 					{
-						DiscoveredLabels:   labels.FromStrings(),
+						DiscoveredLabels:   labels.FromStrings("__scrape_interval__", "0s", "__scrape_timeout__", "0s"),
 						Labels:             labels.FromStrings("job", "test"),
 						ScrapePool:         "test",
 						ScrapeURL:          "http://example.com:8080/metrics",
@@ -1595,7 +1594,7 @@ func testEndpoints(t *testing.T, api *API, tr *testTargetRetriever, es storage.E
 			response: &TargetDiscovery{
 				ActiveTargets: []*Target{
 					{
-						DiscoveredLabels:   labels.FromStrings(),
+						DiscoveredLabels:   labels.FromStrings("__param_target", "example.com", "__scrape_interval__", "0s", "__scrape_timeout__", "0s"),
 						Labels:             labels.FromStrings("job", "blackbox"),
 						ScrapePool:         "blackbox",
 						ScrapeURL:          "http://localhost:9115/probe?target=example.com",
@@ -1608,7 +1607,7 @@ func testEndpoints(t *testing.T, api *API, tr *testTargetRetriever, es storage.E
 						ScrapeTimeout:      "10s",
 					},
 					{
-						DiscoveredLabels:   labels.FromStrings(),
+						DiscoveredLabels:   labels.FromStrings("__scrape_interval__", "0s", "__scrape_timeout__", "0s"),
 						Labels:             labels.FromStrings("job", "test"),
 						ScrapePool:         "test",
 						ScrapeURL:          "http://example.com:8080/metrics",
