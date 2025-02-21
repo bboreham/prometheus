@@ -114,15 +114,13 @@ type Labels struct {
 	data string
 }
 
-func decodeSize(data string, index int) (int, int, bool) {
+// decodeSizeRaw returns 0 in the case of a mapped string, where the next byte is the string number.
+func decodeSizeRaw(data string, index int) (int, int) {
 	// Fast-path for common case of a single byte, value 0..127.
 	b := data[index]
 	index++
-	if b == 0x0 {
-		return 1, index, true
-	}
 	if b < 0x80 {
-		return int(b), index, false
+		return int(b), index
 	}
 	size := int(b & 0x7F)
 	for shift := uint(7); ; shift += 7 {
@@ -135,16 +133,24 @@ func decodeSize(data string, index int) (int, int, bool) {
 			break
 		}
 	}
-	return size, index, false
+	return size, index
+}
+
+// decodeSize returns the actual size of the value, useful when you are skipping past.
+func decodeSize(data string, index int) (int, int) {
+	size, index := decodeSizeRaw(data, index)
+	if size == 0 {
+		size = 1
+	}
+	return size, index
 }
 
 func decodeString(data string, index int) (string, int) {
 	var size int
-	var mapped bool
-	size, index, mapped = decodeSize(data, index)
-	if mapped {
+	size, index = decodeSizeRaw(data, index)
+	if size == 0 {
 		b := data[index]
-		return MappedLabels[int(b)], index + size
+		return MappedLabels[int(b)], index + 1
 	}
 	return data[index : index+size], index + size
 }
@@ -298,10 +304,9 @@ func (ls Labels) Get(name string) string {
 	}
 	for i := 0; i < len(ls.data); {
 		var size, next int
-		var mapped bool
 		var lName, lValue string
-		size, next, mapped = decodeSize(ls.data, i) // Read the key index and size.
-		if mapped {                                 // Key is a mapped string, so decode it fully and move i to the value index.
+		size, next = decodeSizeRaw(ls.data, i) // Read the key index and size.
+		if size == 0 {                         // Key is a mapped string, so decode it fully and move i to the value index.
 			lName, i = decodeString(ls.data, i)
 			if lName == name {
 				lValue, _ = decodeString(ls.data, i)
@@ -326,8 +331,8 @@ func (ls Labels) Get(name string) string {
 				i += size
 			}
 		}
-		size, i, _ = decodeSize(ls.data, i) // Read the value index and size.
-		i += size                           // move the index past the value so we can read the next key.
+		size, i = decodeSize(ls.data, i) // Read the value index and size.
+		i += size                        // move the index past the value so we can read the next key.
 	}
 	return ""
 }
@@ -339,10 +344,9 @@ func (ls Labels) Has(name string) bool {
 	}
 	for i := 0; i < len(ls.data); {
 		var size, next int
-		var mapped bool
 		var lName string
-		size, next, mapped = decodeSize(ls.data, i)
-		if mapped {
+		size, next = decodeSizeRaw(ls.data, i)
+		if size == 0 {
 			lName, i = decodeString(ls.data, i)
 			if lName == name {
 				return true
@@ -364,7 +368,7 @@ func (ls Labels) Has(name string) bool {
 			}
 			i += size
 		}
-		size, i, _ = decodeSize(ls.data, i)
+		size, i = decodeSize(ls.data, i)
 		i += size
 	}
 	return false
@@ -482,10 +486,10 @@ func Compare(a, b Labels) int {
 	// Now we know that there is some difference before the end of a and b.
 	// Go back through the fields and find which field that difference is in.
 	firstCharDifferent, i := i, 0
-	size, nextI, _ := decodeSize(a.data, i)
+	size, nextI := decodeSize(a.data, i)
 	for nextI+size <= firstCharDifferent {
 		i = nextI + size
-		size, nextI, _ = decodeSize(a.data, i)
+		size, nextI = decodeSize(a.data, i)
 	}
 	// Difference is inside this entry.
 	aStr, _ := decodeString(a.data, i)
@@ -511,9 +515,9 @@ func (ls Labels) Len() int {
 	count := 0
 	for i := 0; i < len(ls.data); {
 		var size int
-		size, i, _ = decodeSize(ls.data, i)
+		size, i = decodeSize(ls.data, i)
 		i += size
-		size, i, _ = decodeSize(ls.data, i)
+		size, i = decodeSize(ls.data, i)
 		i += size
 		count++
 	}
@@ -548,7 +552,7 @@ func (ls Labels) Validate(f func(l Label) error) error {
 func (ls Labels) DropMetricName() Labels {
 	for i := 0; i < len(ls.data); {
 		lName, i2 := decodeString(ls.data, i)
-		size, i2, _ := decodeSize(ls.data, i2)
+		size, i2 := decodeSize(ls.data, i2)
 		i2 += size
 		if lName == MetricName {
 			if i == 0 { // Make common case fast with no allocations.
