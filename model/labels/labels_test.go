@@ -528,12 +528,15 @@ func TestLabels_Has(t *testing.T) {
 		got := labelsSet.Has(test.input)
 		require.Equal(t, test.expected, got, "unexpected comparison result for test case %d", i)
 	}
+	// Check unusual case where label has a blank value.
+	require.False(t, FromStrings("aaaa", "111", "blank", "", "bbb", "222").Has("foo"))
 }
 
 func TestLabels_Get(t *testing.T) {
 	require.Equal(t, "", FromStrings("aaa", "111", "bbb", "222").Get("foo"))
 	require.Equal(t, "111", FromStrings("aaaa", "111", "bbb", "222").Get("aaaa"))
 	require.Equal(t, "222", FromStrings("aaaa", "111", "bbb", "222").Get("bbb"))
+	require.Equal(t, "222", FromStrings("aaaa", "111", "blank", "", "bbb", "222").Get("bbb"))
 }
 
 func TestLabels_DropMetricName(t *testing.T) {
