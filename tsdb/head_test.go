@@ -237,60 +237,19 @@ func BenchmarkLoadWLs(b *testing.B) {
 		oooSamplesPct float64
 		oooCapMax     int64
 	}{
-		{ // Less series and more samples. 2 hour WAL with 1 second scrape interval.
-			batches:          10,
-			seriesPerBatch:   100,
-			samplesPerSeries: 7200,
-		},
-		{ // More series and less samples.
-			batches:          10,
+		{
+			batches:          1000,
 			seriesPerBatch:   10000,
 			samplesPerSeries: 50,
-		},
-		{ // In between.
-			batches:          10,
-			seriesPerBatch:   1000,
-			samplesPerSeries: 480,
-		},
-		{ // 2 hour WAL with 15 second scrape interval, and mmapped chunks up to last 100 samples.
-			batches:          100,
-			seriesPerBatch:   1000,
-			samplesPerSeries: 480,
-			mmappedChunkT:    3800,
-		},
-		{ // A lot of OOO samples (50% series with 50% of samples being OOO).
-			batches:          10,
-			seriesPerBatch:   1000,
-			samplesPerSeries: 480,
-			oooSeriesPct:     0.5,
-			oooSamplesPct:    0.5,
-			oooCapMax:        DefaultOutOfOrderCapMax,
-		},
-		{ // Fewer OOO samples (10% of series with 10% of samples being OOO).
-			batches:          10,
-			seriesPerBatch:   1000,
-			samplesPerSeries: 480,
-			oooSeriesPct:     0.1,
-			oooSamplesPct:    0.1,
-		},
-		{ // 2 hour WAL with 15 second scrape interval, and mmapped chunks up to last 100 samples.
-			// Four mmap markers per OOO series: 480 * 0.3 = 144, 144 / 32 (DefaultOutOfOrderCapMax) = 4.
-			batches:          100,
-			seriesPerBatch:   1000,
-			samplesPerSeries: 480,
-			mmappedChunkT:    3800,
-			oooSeriesPct:     0.2,
-			oooSamplesPct:    0.3,
-			oooCapMax:        DefaultOutOfOrderCapMax,
 		},
 	}
 
 	labelsPerSeries := 5
 	// Rough estimates of most common % of samples that have an exemplar for each scrape.
-	exemplarsPercentages := []float64{0, 0.5, 1, 5}
+	exemplarsPercentages := []float64{0}
 	lastExemplarsPerSeries := -1
 	for _, c := range cases {
-		missingSeriesPercentages := []float64{0, 0.1}
+		missingSeriesPercentages := []float64{0}
 		for _, missingSeriesPct := range missingSeriesPercentages {
 			for _, p := range exemplarsPercentages {
 				exemplarsPerSeries := int(math.RoundToEven(float64(c.samplesPerSeries) * p / 100))
