@@ -16,6 +16,7 @@ package labels
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
@@ -565,31 +566,52 @@ func FromStringsForBenchmark(ss ...string) Labels {
 //	Labels_Get/with_30_labels/get_middle_label    75.8ns ± 0%    29.7ns ± 0%   ~     (p=1.000 n=1+1)
 //	Labels_Get/with_30_labels/get_last_label       169ns ± 0%      29ns ± 0%   ~     (p=1.000 n=1+1)
 func BenchmarkLabels_Get(b *testing.B) {
-	maxLabels := 30
-	allLabels := make([]Label, maxLabels)
-	for i := 0; i < maxLabels; i++ {
-		allLabels[i] = Label{Name: strings.Repeat(string('a'+byte(i)), 5+(i%5))}
-	}
-	for _, size := range []int{5, 10, maxLabels} {
+	const (
+		setsOfLabels = 1 << 20
+		maxLabels    = 30
+	)
+	for _, size := range []int{ /*5, */ 10, maxLabels} {
 		b.Run(fmt.Sprintf("with %d labels", size), func(b *testing.B) {
-			labels := NewForBenchmark(allLabels[:size]...)
+			builder := ScratchBuilderForBenchmark()
+			allLabels := make([]Labels, setsOfLabels)
+			first := make([]string, setsOfLabels)
+			middle := make([]string, setsOfLabels)
+			last := make([]string, setsOfLabels)
+			notFound := make([]string, setsOfLabels)
+			for j := 0; j < setsOfLabels; j++ {
+				builder.Reset()
+				for i := 0; i < size; i++ {
+					builder.Add(strings.Repeat(string('a'+byte(i)), 5+(i%5))+string('a'+byte(j%26)), "value")
+				}
+				builder.Sort()
+				first[j] = builder.add[0].Name
+				middle[j] = builder.add[rand.Int63n(int64(size))].Name
+				allLabels[j] = builder.Labels()
+				last[j] = builder.add[size-1].Name
+				notFound[j] = "benchmark"
+			}
 			for _, scenario := range []struct {
-				desc, label string
+				desc string
+				find []string
 			}{
-				{"first label", allLabels[0].Name},
-				{"middle label", allLabels[size/2].Name},
-				{"last label", allLabels[size-1].Name},
-				{"not-found label", "benchmark"},
+				{"last label", last},
+				{"first label", first},
+				{"middle label", middle},
+				{"not-found label", notFound},
 			} {
 				b.Run(scenario.desc, func(b *testing.B) {
 					b.Run("get", func(b *testing.B) {
 						for i := 0; i < b.N; i++ {
-							_ = labels.Get(scenario.label)
+							labels := allLabels[i%setsOfLabels]
+							find := scenario.find[i%setsOfLabels]
+							_ = labels.Get(find)
 						}
 					})
 					b.Run("has", func(b *testing.B) {
 						for i := 0; i < b.N; i++ {
-							_ = labels.Has(scenario.label)
+							labels := allLabels[i%setsOfLabels]
+							find := scenario.find[i%setsOfLabels]
+							_ = labels.Has(find)
 						}
 					})
 				})
