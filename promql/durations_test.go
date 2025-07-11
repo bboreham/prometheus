@@ -41,7 +41,7 @@ func TestDurationVisitor(t *testing.T) {
 	expr, err := parser.ParseExpr(complexExpr)
 	require.NoError(t, err)
 
-	err = parser.Walk(&durationVisitor{}, expr, nil)
+	err = WhateverThisBitDoes(expr, 0)
 	require.NoError(t, err)
 
 	// Verify different parts of the expression have correct durations.

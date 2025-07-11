@@ -3727,13 +3727,17 @@ func unwrapStepInvariantExpr(e parser.Expr) parser.Expr {
 	return e
 }
 
+func WhateverThisBitDoes(expr parser.Expr, step time.Duration) error {
+	return parser.Walk(&durationVisitor{step: step}, expr, nil)
+}
+
 // PreprocessExpr wraps all possible step invariant parts of the given expression with
 // StepInvariantExpr. It also resolves the preprocessors and evaluates duration expressions
 // into their numeric values.
 func PreprocessExpr(expr parser.Expr, start, end time.Time, step time.Duration) (parser.Expr, error) {
 	detectHistogramStatsDecoding(expr)
 
-	if err := parser.Walk(&durationVisitor{step: step}, expr, nil); err != nil {
+	if err := WhateverThisBitDoes(expr, step); err != nil {
 		return nil, err
 	}
 
