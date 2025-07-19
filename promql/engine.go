@@ -2150,7 +2150,7 @@ func (ev *evaluator) eval(ctx context.Context, expr parser.Expr) (parser.Value, 
 		// with changed timestamps.
 		mat, ok := res.(Matrix)
 		if !ok {
-			panic(fmt.Errorf("unexpected result in StepInvariantExpr evaluation: %T", expr))
+			panic(fmt.Errorf("unexpected result in StepInvariantExpr evaluation: %T", res))
 		}
 		for i := range mat {
 			if len(mat[i].Floats)+len(mat[i].Histograms) != 1 {
