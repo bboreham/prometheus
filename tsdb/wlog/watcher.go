@@ -98,6 +98,19 @@ type Watcher struct {
 	startTimestamp int64 // the start time as a Prometheus timestamp
 	sendSamples    bool
 
+	// State for reading from segments, retained here to reduce memory allocations.
+	// Do not use from multiple goroutines at once.
+	dec                   record.Decoder
+	series                []record.RefSeries
+	samples               []record.RefSample
+	samplesToSend         []record.RefSample
+	exemplars             []record.RefExemplar
+	histograms            []record.RefHistogramSample
+	histogramsToSend      []record.RefHistogramSample
+	floatHistograms       []record.RefFloatHistogramSample
+	floatHistogramsToSend []record.RefFloatHistogramSample
+	metadata              []record.RefMetadata
+
 	recordsReadMetric       *prometheus.CounterVec
 	recordDecodeFailsMetric prometheus.Counter
 	samplesSentPreTailing   prometheus.Counter
@@ -191,7 +204,7 @@ func NewWatcher(metrics *WatcherMetrics, readerMetrics *LiveReaderMetrics, logge
 	if logger == nil {
 		logger = promslog.NewNopLogger()
 	}
-	return &Watcher{
+	w := &Watcher{
 		logger:         logger,
 		writer:         writer,
 		metrics:        metrics,
@@ -208,6 +221,12 @@ func NewWatcher(metrics *WatcherMetrics, readerMetrics *LiveReaderMetrics, logge
 
 		MaxSegment: -1,
 	}
+	w.Reset()
+	return w
+}
+
+func (w *Watcher) Reset() {
+	w.dec = record.NewDecoder(labels.NewSymbolTable()) // One table per WAL segment means it won't grow indefinitely.
 }
 
 func (w *Watcher) Notify() {
@@ -377,6 +396,7 @@ func (w *Watcher) watch(segmentNum int, tail bool) error {
 	}
 	defer segment.Close()
 
+	w.Reset()
 	reader := NewLiveReader(w.logger, w.readerMetrics, segment)
 
 	size := int64(math.MaxInt64)
@@ -493,31 +513,19 @@ func (w *Watcher) garbageCollectSeries(segmentNum int) error {
 // Read from a segment and pass the details to w.writer.
 // Also used with readCheckpoint - implements segmentReadFn.
 func (w *Watcher) readSegment(r *LiveReader, segmentNum int, tail bool) error {
-	var (
-		dec                   = record.NewDecoder(labels.NewSymbolTable()) // One table per WAL segment means it won't grow indefinitely.
-		series                []record.RefSeries
-		samples               []record.RefSample
-		samplesToSend         []record.RefSample
-		exemplars             []record.RefExemplar
-		histograms            []record.RefHistogramSample
-		histogramsToSend      []record.RefHistogramSample
-		floatHistograms       []record.RefFloatHistogramSample
-		floatHistogramsToSend []record.RefFloatHistogramSample
-		metadata              []record.RefMetadata
-	)
 	for r.Next() && !isClosed(w.quit) {
 		var err error
 		rec := r.Record()
-		w.recordsReadMetric.WithLabelValues(dec.Type(rec).String()).Inc()
+		w.recordsReadMetric.WithLabelValues(w.dec.Type(rec).String()).Inc()
 
-		switch dec.Type(rec) {
+		switch w.dec.Type(rec) {
 		case record.Series:
-			series, err = dec.Series(rec, series[:0])
+			w.series, err = w.dec.Series(rec, w.series[:0])
 			if err != nil {
 				w.recordDecodeFailsMetric.Inc()
 				return err
 			}
-			w.writer.StoreSeries(series, segmentNum)
+			w.writer.StoreSeries(w.series, segmentNum)
 
 		case record.Samples:
 			// If we're not tailing a segment we can ignore any samples records we see.
@@ -525,24 +533,24 @@ func (w *Watcher) readSegment(r *LiveReader, segmentNum int, tail bool) error {
 			if !tail {
 				break
 			}
-			samples, err = dec.Samples(rec, samples[:0])
+			w.samples, err = w.dec.Samples(rec, w.samples[:0])
 			if err != nil {
 				w.recordDecodeFailsMetric.Inc()
 				return err
 			}
-			for _, s := range samples {
+			for _, s := range w.samples {
 				if s.T > w.startTimestamp {
 					if !w.sendSamples {
 						w.sendSamples = true
 						duration := time.Since(w.startTime)
 						w.logger.Info("Done replaying WAL", "duration", duration)
 					}
-					samplesToSend = append(samplesToSend, s)
+					w.samplesToSend = append(w.samplesToSend, s)
 				}
 			}
-			if len(samplesToSend) > 0 {
-				w.writer.Append(samplesToSend)
-				samplesToSend = samplesToSend[:0]
+			if len(w.samplesToSend) > 0 {
+				w.writer.Append(w.samplesToSend)
+				w.samplesToSend = w.samplesToSend[:0]
 			}
 
 		case record.Exemplars:
@@ -555,12 +563,12 @@ func (w *Watcher) readSegment(r *LiveReader, segmentNum int, tail bool) error {
 			if !tail {
 				break
 			}
-			exemplars, err = dec.Exemplars(rec, exemplars[:0])
+			w.exemplars, err = w.dec.Exemplars(rec, w.exemplars[:0])
 			if err != nil {
 				w.recordDecodeFailsMetric.Inc()
 				return err
 			}
-			w.writer.AppendExemplars(exemplars)
+			w.writer.AppendExemplars(w.exemplars)
 
 		case record.HistogramSamples, record.CustomBucketsHistogramSamples:
 			// Skip if experimental "histograms over remote write" is not enabled.
@@ -570,24 +578,24 @@ func (w *Watcher) readSegment(r *LiveReader, segmentNum int, tail bool) error {
 			if !tail {
 				break
 			}
-			histograms, err = dec.HistogramSamples(rec, histograms[:0])
+			w.histograms, err = w.dec.HistogramSamples(rec, w.histograms[:0])
 			if err != nil {
 				w.recordDecodeFailsMetric.Inc()
 				return err
 			}
-			for _, h := range histograms {
+			for _, h := range w.histograms {
 				if h.T > w.startTimestamp {
 					if !w.sendSamples {
 						w.sendSamples = true
 						duration := time.Since(w.startTime)
 						w.logger.Info("Done replaying WAL", "duration", duration)
 					}
-					histogramsToSend = append(histogramsToSend, h)
+					w.histogramsToSend = append(w.histogramsToSend, h)
 				}
 			}
-			if len(histogramsToSend) > 0 {
-				w.writer.AppendHistograms(histogramsToSend)
-				histogramsToSend = histogramsToSend[:0]
+			if len(w.histogramsToSend) > 0 {
+				w.writer.AppendHistograms(w.histogramsToSend)
+				w.histogramsToSend = w.histogramsToSend[:0]
 			}
 
 		case record.FloatHistogramSamples, record.CustomBucketsFloatHistogramSamples:
@@ -598,36 +606,36 @@ func (w *Watcher) readSegment(r *LiveReader, segmentNum int, tail bool) error {
 			if !tail {
 				break
 			}
-			floatHistograms, err = dec.FloatHistogramSamples(rec, floatHistograms[:0])
+			w.floatHistograms, err = w.dec.FloatHistogramSamples(rec, w.floatHistograms[:0])
 			if err != nil {
 				w.recordDecodeFailsMetric.Inc()
 				return err
 			}
-			for _, fh := range floatHistograms {
+			for _, fh := range w.floatHistograms {
 				if fh.T > w.startTimestamp {
 					if !w.sendSamples {
 						w.sendSamples = true
 						duration := time.Since(w.startTime)
 						w.logger.Info("Done replaying WAL", "duration", duration)
 					}
-					floatHistogramsToSend = append(floatHistogramsToSend, fh)
+					w.floatHistogramsToSend = append(w.floatHistogramsToSend, fh)
 				}
 			}
-			if len(floatHistogramsToSend) > 0 {
-				w.writer.AppendFloatHistograms(floatHistogramsToSend)
-				floatHistogramsToSend = floatHistogramsToSend[:0]
+			if len(w.floatHistogramsToSend) > 0 {
+				w.writer.AppendFloatHistograms(w.floatHistogramsToSend)
+				w.floatHistogramsToSend = w.floatHistogramsToSend[:0]
 			}
 
 		case record.Metadata:
 			if !w.sendMetadata {
 				break
 			}
-			metadata, err = dec.Metadata(rec, metadata[:0])
+			w.metadata, err = w.dec.Metadata(rec, w.metadata[:0])
 			if err != nil {
 				w.recordDecodeFailsMetric.Inc()
 				return err
 			}
-			w.writer.StoreMetadata(metadata)
+			w.writer.StoreMetadata(w.metadata)
 
 		case record.Unknown:
 			// Could be corruption, or reading from a WAL from a newer Prometheus.
