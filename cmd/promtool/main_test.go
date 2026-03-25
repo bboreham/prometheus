@@ -71,14 +71,14 @@ func TestQueryRange(t *testing.T) {
 	require.NoError(t, err)
 
 	p := &promqlPrinter{}
-	exitCode := QueryRange(urlObject, http.DefaultTransport, map[string]string{}, "up", "0", "300", 0, p)
+	exitCode := QueryRange(urlObject, http.DefaultTransport, map[string]string{}, "up", "0", "300", 0, p, false)
 	require.Equal(t, "/api/v1/query_range", getRequest().URL.Path)
 	form := getRequest().Form
 	require.Equal(t, "up", form.Get("query"))
 	require.Equal(t, "1", form.Get("step"))
 	require.Equal(t, 0, exitCode)
 
-	exitCode = QueryRange(urlObject, http.DefaultTransport, map[string]string{}, "up", "0", "300", 10*time.Millisecond, p)
+	exitCode = QueryRange(urlObject, http.DefaultTransport, map[string]string{}, "up", "0", "300", 10*time.Millisecond, p, false)
 	require.Equal(t, "/api/v1/query_range", getRequest().URL.Path)
 	form = getRequest().Form
 	require.Equal(t, "up", form.Get("query"))
@@ -95,7 +95,7 @@ func TestQueryInstant(t *testing.T) {
 	require.NoError(t, err)
 
 	p := &promqlPrinter{}
-	exitCode := QueryInstant(urlObject, http.DefaultTransport, "up", "300", p)
+	exitCode := QueryInstant(urlObject, http.DefaultTransport, "up", "300", p, false)
 	require.Equal(t, "/api/v1/query", getRequest().URL.Path)
 	form := getRequest().Form
 	require.Equal(t, "up", form.Get("query"))
@@ -236,7 +236,7 @@ func TestCheckTargetConfig(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			_, _, err := checkConfig(false, "testdata/"+test.file, false)
+			_, _, _, err := checkConfig(false, "testdata/"+test.file, false)
 			if test.err != "" {
 				require.EqualErrorf(t, err, test.err, "Expected error %q, got %q", test.err, err.Error())
 				return
@@ -321,7 +321,7 @@ func TestCheckConfigSyntax(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			_, _, err := checkConfig(false, "testdata/"+test.file, test.syntaxOnly)
+			_, _, _, err := checkConfig(false, "testdata/"+test.file, test.syntaxOnly)
 			expectedErrMsg := test.err
 			if strings.Contains(runtime.GOOS, "windows") {
 				expectedErrMsg = test.errWindows
@@ -357,7 +357,7 @@ func TestAuthorizationConfig(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			_, _, err := checkConfig(false, "testdata/"+test.file, false)
+			_, _, _, err := checkConfig(false, "testdata/"+test.file, false)
 			if test.err != "" {
 				require.ErrorContains(t, err, test.err, "Expected error to contain %q, got %q", test.err, err.Error())
 				return
@@ -603,7 +603,7 @@ func TestCheckRules(t *testing.T) {
 		defer func(v *os.File) { os.Stdin = v }(os.Stdin)
 		os.Stdin = r
 
-		exitCode := CheckRules(newRulesLintConfig(lintOptionDuplicateRules, false, false, model.UTF8Validation), parser.NewParser(parser.Options{}))
+		exitCode := CheckRules(newRulesLintConfig(lintOptionDuplicateRules, false, false, model.UTF8Validation), false, parser.NewParser(parser.Options{}))
 		require.Equal(t, successExitCode, exitCode)
 	})
 
@@ -625,7 +625,7 @@ func TestCheckRules(t *testing.T) {
 		defer func(v *os.File) { os.Stdin = v }(os.Stdin)
 		os.Stdin = r
 
-		exitCode := CheckRules(newRulesLintConfig(lintOptionDuplicateRules, false, false, model.UTF8Validation), parser.NewParser(parser.Options{}))
+		exitCode := CheckRules(newRulesLintConfig(lintOptionDuplicateRules, false, false, model.UTF8Validation), false, parser.NewParser(parser.Options{}))
 		require.Equal(t, failureExitCode, exitCode)
 	})
 
@@ -647,7 +647,7 @@ func TestCheckRules(t *testing.T) {
 		defer func(v *os.File) { os.Stdin = v }(os.Stdin)
 		os.Stdin = r
 
-		exitCode := CheckRules(newRulesLintConfig(lintOptionDuplicateRules, true, false, model.UTF8Validation), parser.NewParser(parser.Options{}))
+		exitCode := CheckRules(newRulesLintConfig(lintOptionDuplicateRules, true, false, model.UTF8Validation), false, parser.NewParser(parser.Options{}))
 		require.Equal(t, lintErrExitCode, exitCode)
 	})
 }
@@ -665,19 +665,19 @@ func TestCheckRulesWithFeatureFlag(t *testing.T) {
 func TestCheckRulesWithRuleFiles(t *testing.T) {
 	t.Run("rules-good", func(t *testing.T) {
 		t.Parallel()
-		exitCode := CheckRules(newRulesLintConfig(lintOptionDuplicateRules, false, false, model.UTF8Validation), parser.NewParser(parser.Options{}), "./testdata/rules.yml")
+		exitCode := CheckRules(newRulesLintConfig(lintOptionDuplicateRules, false, false, model.UTF8Validation), false, parser.NewParser(parser.Options{}), "./testdata/rules.yml")
 		require.Equal(t, successExitCode, exitCode)
 	})
 
 	t.Run("rules-bad", func(t *testing.T) {
 		t.Parallel()
-		exitCode := CheckRules(newRulesLintConfig(lintOptionDuplicateRules, false, false, model.UTF8Validation), parser.NewParser(parser.Options{}), "./testdata/rules-bad.yml")
+		exitCode := CheckRules(newRulesLintConfig(lintOptionDuplicateRules, false, false, model.UTF8Validation), false, parser.NewParser(parser.Options{}), "./testdata/rules-bad.yml")
 		require.Equal(t, failureExitCode, exitCode)
 	})
 
 	t.Run("rules-lint-fatal", func(t *testing.T) {
 		t.Parallel()
-		exitCode := CheckRules(newRulesLintConfig(lintOptionDuplicateRules, true, false, model.UTF8Validation), parser.NewParser(parser.Options{}), "./testdata/prometheus-rules.lint.yml")
+		exitCode := CheckRules(newRulesLintConfig(lintOptionDuplicateRules, true, false, model.UTF8Validation), false, parser.NewParser(parser.Options{}), "./testdata/prometheus-rules.lint.yml")
 		require.Equal(t, lintErrExitCode, exitCode)
 	})
 }
@@ -707,23 +707,44 @@ func TestCheckScrapeConfigs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Non-fatal linting.
 			p := parser.NewParser(parser.Options{})
-			code := CheckConfig(false, false, newConfigLintConfig(lintOptionTooLongScrapeInterval, false, false, model.UTF8Validation, tc.lookbackDelta), p, "./testdata/prometheus-config.lint.too_long_scrape_interval.yml")
+			code := CheckConfig(false, false, newConfigLintConfig(lintOptionTooLongScrapeInterval, false, false, model.UTF8Validation, tc.lookbackDelta), false, p, "./testdata/prometheus-config.lint.too_long_scrape_interval.yml")
 			require.Equal(t, successExitCode, code, "Non-fatal linting should return success")
 			// Fatal linting.
-			code = CheckConfig(false, false, newConfigLintConfig(lintOptionTooLongScrapeInterval, true, false, model.UTF8Validation, tc.lookbackDelta), p, "./testdata/prometheus-config.lint.too_long_scrape_interval.yml")
+			code = CheckConfig(false, false, newConfigLintConfig(lintOptionTooLongScrapeInterval, true, false, model.UTF8Validation, tc.lookbackDelta), false, p, "./testdata/prometheus-config.lint.too_long_scrape_interval.yml")
 			if tc.expectError {
 				require.Equal(t, lintErrExitCode, code, "Fatal linting should return error")
 			} else {
 				require.Equal(t, successExitCode, code, "Fatal linting should return success when there are no problems")
 			}
 			// Check syntax only, no linting.
-			code = CheckConfig(false, true, newConfigLintConfig(lintOptionTooLongScrapeInterval, true, false, model.UTF8Validation, tc.lookbackDelta), p, "./testdata/prometheus-config.lint.too_long_scrape_interval.yml")
+			code = CheckConfig(false, true, newConfigLintConfig(lintOptionTooLongScrapeInterval, true, false, model.UTF8Validation, tc.lookbackDelta), false, p, "./testdata/prometheus-config.lint.too_long_scrape_interval.yml")
 			require.Equal(t, successExitCode, code, "Fatal linting should return success when checking syntax only")
 			// Lint option "none" should disable linting.
-			code = CheckConfig(false, false, newConfigLintConfig(lintOptionNone+","+lintOptionTooLongScrapeInterval, true, false, model.UTF8Validation, tc.lookbackDelta), p, "./testdata/prometheus-config.lint.too_long_scrape_interval.yml")
+			code = CheckConfig(false, false, newConfigLintConfig(lintOptionNone+","+lintOptionTooLongScrapeInterval, true, false, model.UTF8Validation, tc.lookbackDelta), false, p, "./testdata/prometheus-config.lint.too_long_scrape_interval.yml")
 			require.Equal(t, successExitCode, code, `Fatal linting should return success when lint option "none" is specified`)
 		})
 	}
+}
+
+func TestWarnAsError(t *testing.T) {
+	t.Parallel()
+	p := parser.NewParser(parser.Options{})
+
+	// Without --warn-as-error, missing file_sd files produce a warning but succeed.
+	code := CheckConfig(false, false, newConfigLintConfig(lintOptionDuplicateRules, false, false, model.UTF8Validation, 0), false, p, "./testdata/config_with_service_discovery_files.yml")
+	require.Equal(t, successExitCode, code, "Missing file_sd files should not fail without --warn-as-error")
+
+	// With --warn-as-error, missing file_sd files cause failure.
+	code = CheckConfig(false, false, newConfigLintConfig(lintOptionDuplicateRules, false, false, model.UTF8Validation, 0), true, p, "./testdata/config_with_service_discovery_files.yml")
+	require.Equal(t, failureExitCode, code, "Missing file_sd files should fail with --warn-as-error")
+
+	// With --warn-as-error, lint issues also cause failure with exit code 1 (not 3).
+	code = CheckConfig(false, false, newConfigLintConfig(lintOptionTooLongScrapeInterval, false, false, model.UTF8Validation, model.Duration(5*time.Minute)), true, p, "./testdata/prometheus-config.lint.too_long_scrape_interval.yml")
+	require.Equal(t, failureExitCode, code, "Lint issues should fail with exit code 1 when --warn-as-error is set")
+
+	// With --warn-as-error, lint issues in rules also cause failure with exit code 1.
+	code = CheckRules(newRulesLintConfig(lintOptionDuplicateRules, false, false, model.UTF8Validation), true, p, "./testdata/prometheus-rules.lint.yml")
+	require.Equal(t, failureExitCode, code, "Lint rule issues should fail with exit code 1 when --warn-as-error is set")
 }
 
 func TestTSDBDumpCommand(t *testing.T) {

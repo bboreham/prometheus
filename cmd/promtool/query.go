@@ -61,7 +61,7 @@ func newAPI(url *url.URL, roundTripper http.RoundTripper, headers map[string]str
 }
 
 // QueryInstant performs an instant query against a Prometheus server.
-func QueryInstant(url *url.URL, roundTripper http.RoundTripper, query, evalTime string, p printer) int {
+func QueryInstant(url *url.URL, roundTripper http.RoundTripper, query, evalTime string, p printer, warnAsError bool) int {
 	api, err := newAPI(url, roundTripper, nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error creating API client:", err)
@@ -79,10 +79,16 @@ func QueryInstant(url *url.URL, roundTripper http.RoundTripper, query, evalTime 
 
 	// Run query against client.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	val, _, err := api.Query(ctx, query, eTime) // Ignoring warnings for now.
+	val, warnings, err := api.Query(ctx, query, eTime)
 	cancel()
+	for _, w := range warnings {
+		fmt.Fprintln(os.Stderr, "query warning:", w)
+	}
 	if err != nil {
 		return handleAPIError(err)
+	}
+	if warnAsError && len(warnings) > 0 {
+		return failureExitCode
 	}
 
 	p.printValue(val)
@@ -91,7 +97,7 @@ func QueryInstant(url *url.URL, roundTripper http.RoundTripper, query, evalTime 
 }
 
 // QueryRange performs a range query against a Prometheus server.
-func QueryRange(url *url.URL, roundTripper http.RoundTripper, headers map[string]string, query, start, end string, step time.Duration, p printer) int {
+func QueryRange(url *url.URL, roundTripper http.RoundTripper, headers map[string]string, query, start, end string, step time.Duration, p printer, warnAsError bool) int {
 	api, err := newAPI(url, roundTripper, headers)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error creating API client:", err)
@@ -134,11 +140,16 @@ func QueryRange(url *url.URL, roundTripper http.RoundTripper, headers map[string
 	// Run query against client.
 	r := v1.Range{Start: stime, End: etime, Step: step}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	val, _, err := api.QueryRange(ctx, query, r) // Ignoring warnings for now.
+	val, warnings, err := api.QueryRange(ctx, query, r)
 	cancel()
-
+	for _, w := range warnings {
+		fmt.Fprintln(os.Stderr, "query warning:", w)
+	}
 	if err != nil {
 		return handleAPIError(err)
+	}
+	if warnAsError && len(warnings) > 0 {
+		return failureExitCode
 	}
 
 	p.printValue(val)
@@ -146,7 +157,7 @@ func QueryRange(url *url.URL, roundTripper http.RoundTripper, headers map[string
 }
 
 // QuerySeries queries for a series against a Prometheus server.
-func QuerySeries(url *url.URL, roundTripper http.RoundTripper, matchers []string, start, end string, p printer) int {
+func QuerySeries(url *url.URL, roundTripper http.RoundTripper, matchers []string, start, end string, p printer, warnAsError bool) int {
 	api, err := newAPI(url, roundTripper, nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error creating API client:", err)
@@ -161,11 +172,16 @@ func QuerySeries(url *url.URL, roundTripper http.RoundTripper, matchers []string
 
 	// Run query against client.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	val, _, err := api.Series(ctx, matchers, stime, etime) // Ignoring warnings for now.
+	val, warnings, err := api.Series(ctx, matchers, stime, etime)
 	cancel()
-
+	for _, w := range warnings {
+		fmt.Fprintln(os.Stderr, "query warning:", w)
+	}
 	if err != nil {
 		return handleAPIError(err)
+	}
+	if warnAsError && len(warnings) > 0 {
+		return failureExitCode
 	}
 
 	p.printSeries(val)
@@ -173,7 +189,7 @@ func QuerySeries(url *url.URL, roundTripper http.RoundTripper, matchers []string
 }
 
 // QueryLabels queries for label values against a Prometheus server.
-func QueryLabels(url *url.URL, roundTripper http.RoundTripper, matchers []string, name, start, end string, p printer) int {
+func QueryLabels(url *url.URL, roundTripper http.RoundTripper, matchers []string, name, start, end string, p printer, warnAsError bool) int {
 	api, err := newAPI(url, roundTripper, nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error creating API client:", err)
@@ -196,6 +212,9 @@ func QueryLabels(url *url.URL, roundTripper http.RoundTripper, matchers []string
 	}
 	if err != nil {
 		return handleAPIError(err)
+	}
+	if warnAsError && len(warn) > 0 {
+		return failureExitCode
 	}
 
 	p.printLabelValues(val)
