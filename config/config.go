@@ -191,7 +191,7 @@ var (
 		MetricNameEscapingScheme:       model.AllowUTF8,
 		// Default to 1 MiB to avoid crashes from the 16 MiB encoding limit.
 		LabelNameLengthLimit:  1 << 20,
-		LabelValueLengthLimit: 1 << 20,
+		LabelValueLengthLimit: 1 << 21,
 	}
 
 	DefaultRuntimeConfig = RuntimeConfig{
@@ -703,9 +703,6 @@ func (c *GlobalConfig) UnmarshalYAML(unmarshal func(any) error) error {
 	}
 	if gc.LabelNameLengthLimit == 0 {
 		gc.LabelNameLengthLimit = DefaultGlobalConfig.LabelNameLengthLimit
-	}
-	if gc.LabelValueLengthLimit == 0 {
-		gc.LabelValueLengthLimit = DefaultGlobalConfig.LabelValueLengthLimit
 	}
 
 	*c = *gc

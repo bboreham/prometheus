@@ -2929,7 +2929,7 @@ func TestGetScrapeConfigs(t *testing.T) {
 					AlwaysScrapeClassicHistograms:  boolPtr(false),
 					ConvertClassicHistogramsToNHCB: boolPtr(false),
 					ExtraScrapeMetrics:             boolPtr(false),
-					LabelNameLengthLimit:           DefaultGlobalConfig.LabelNameLengthLimit,
+					LabelNameLengthLimit:           DefaultGlobalConfig.LabelValueLengthLimit,
 					LabelValueLengthLimit:          DefaultGlobalConfig.LabelValueLengthLimit,
 
 					MetricsPath: DefaultScrapeConfig.MetricsPath,
