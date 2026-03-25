@@ -49,8 +49,8 @@ type writeHandler struct {
 	enableTypeAndUnitLabels bool
 	appendMetadata          bool
 
-	labelNameLengthLimit int
-	labelVlueLengthLimit int
+	labelNameLengthLimit  int
+	labelValueLengthLimit int
 }
 
 const maxAheadTime = 10 * time.Minute
