@@ -39,9 +39,10 @@ type Label struct {
 	Name, Value string
 }
 
-// Labels is a sorted set of labels. Order has to be guaranteed upon
-// instantiation.
-type Labels []Label
+// Labels is implemented by a single flat string holding name/value pairs.
+type Labels struct {
+	data string
+}
 
 func (ls Labels) Len() int           { return len(ls) }
 func (ls Labels) Swap(i, j int)      { ls[i], ls[j] = ls[j], ls[i] }
